@@ -24,6 +24,9 @@ export type ActivityAction =
   | 'correction_rejected'
   | 'period_locked'
   | 'period_unlocked'
+  | 'master_created'
+  | 'master_updated'
+  | 'user_password_reset_by_admin'
 
 type LogInput = {
   userId?: string | null

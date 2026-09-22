@@ -23,7 +23,7 @@ export function Brand({
     <div className={cn('flex items-center gap-2.5', className)}>
       <BrandMark size={size} />
       <div className="leading-tight">
-        <div className="font-extrabold" style={{ fontSize: Math.round(size * 0.46) }}>
+        <div className="font-heading font-extrabold" style={{ fontSize: Math.round(size * 0.46) }}>
           Notu
         </div>
         {subtitle && <div className="text-[11px] text-ink-400">{subtitle}</div>}

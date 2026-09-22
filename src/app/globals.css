@@ -43,6 +43,15 @@
     color: inherit;
     text-decoration: none;
   }
+  /* Font: heading DM Sans, body Figtree (diterapkan via Tailwind + var di atas) */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
   a:focus-visible,
   button:focus-visible,
   input:focus-visible,
@@ -65,7 +74,8 @@
 }
 
 @layer components {
-  /* Gradient brand — button primary, tab underline, brand mark */
+  /* Gradient brand — HANYA untuk brand mark & dekorasi.
+     JANGAN dipakai untuk button: button selalu warna solid dari palette (keputusan user). */
   .bg-brand-grad {
     background-image: linear-gradient(135deg, var(--brand-1), var(--brand-2));
   }

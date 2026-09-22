@@ -28,7 +28,8 @@ const config: Config = {
         brand: '0 10px 22px -10px rgba(139,47,242,0.55)',
       },
       fontFamily: {
-        sans: ['var(--font-jakarta)', 'sans-serif'],
+        sans: ['var(--font-body)', 'sans-serif'],
+        heading: ['var(--font-heading)', 'sans-serif'],
         mono: ['var(--font-jono)', 'monospace'],
       },
     },

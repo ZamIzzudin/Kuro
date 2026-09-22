@@ -1,11 +1,16 @@
 import type { Metadata } from 'next'
-import { JetBrains_Mono, Plus_Jakarta_Sans } from 'next/font/google'
+import { DM_Sans, Figtree, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 
-const jakarta = Plus_Jakarta_Sans({
+// Font (keputusan user): heading = DM Sans, body = Figtree, mono = JetBrains Mono
+const dmSans = DM_Sans({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-jakarta',
+  variable: '--font-heading',
+})
+
+const figtree = Figtree({
+  subsets: ['latin'],
+  variable: '--font-body',
 })
 
 const mono = JetBrains_Mono({
@@ -22,7 +27,9 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id">
-      <body className={`${jakarta.variable} ${mono.variable} font-sans`}>{children}</body>
+      <body className={`${dmSans.variable} ${figtree.variable} ${mono.variable} font-sans`}>
+        {children}
+      </body>
     </html>
   )
 }

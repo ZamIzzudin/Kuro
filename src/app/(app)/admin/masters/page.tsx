@@ -1,15 +1,8 @@
-import { Database } from 'lucide-react'
-import { ComingSoon } from '@/components/coming-soon'
+import type { Metadata } from 'next'
+import { MastersClient } from './masters-client'
 
-export const metadata = { title: 'Master Data' }
+export const metadata: Metadata = { title: 'Master' }
 
 export default function AdminMastersPage() {
-  return (
-    <ComingSoon
-      icon={Database}
-      title="Master Data"
-      description="Kelola master Project, Jenis Pekerjaan, dan Requester (termasuk tambah requester baru — khusus Admin) — menyusul di Fase 1."
-      phase="Fase 1 · Masters & User"
-    />
-  )
+  return <MastersClient />
 }

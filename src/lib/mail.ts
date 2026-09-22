@@ -36,7 +36,7 @@ export function resetPasswordEmail(name: string, link: string) {
     <p>Halo ${name},</p>
     <p>Kami menerima permintaan reset password akun <b>Notu</b> Anda. Klik tombol berikut (berlaku <b>1 jam</b>):</p>
     <p style="margin:24px 0">
-      <a href="${link}" style="background:linear-gradient(135deg,#8B2FF2,#D926C8);color:#ffffff;padding:12px 28px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Reset Password</a>
+      <a href="${link}" style="background:#8B2FF2;color:#ffffff;padding:12px 28px;border-radius:999px;text-decoration:none;font-weight:700;display:inline-block">Reset Password</a>
     </p>
     <p style="color:#6F6E78;font-size:13px">Jika Anda tidak meminta reset ini, abaikan email ini — password Anda tidak berubah.</p>
   </div>`

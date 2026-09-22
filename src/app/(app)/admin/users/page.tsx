@@ -1,15 +1,8 @@
-import { Users } from 'lucide-react'
-import { ComingSoon } from '@/components/coming-soon'
+import type { Metadata } from 'next'
+import { UsersClient } from './users-client'
 
-export const metadata = { title: 'User' }
+export const metadata: Metadata = { title: 'User' }
 
 export default function AdminUsersPage() {
-  return (
-    <ComingSoon
-      icon={Users}
-      title="Kelola User"
-      description="Buat akun admin/freelancer, aktif/nonaktif, dan reset password — menyusul di Fase 1."
-      phase="Fase 1 · Masters & User"
-    />
-  )
+  return <UsersClient />
 }
