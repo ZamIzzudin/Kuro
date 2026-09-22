@@ -1,0 +1,213 @@
+// Notu — Prisma schema (Fase 0)
+// Sumber: RANCANGAN_PENGEMBANGAN.md §4
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== Enums =====
+
+enum Role {
+  admin
+  freelancer
+}
+
+enum TaskStatus {
+  todo
+  in_progress
+  review
+  done
+  cancelled
+}
+
+enum Priority {
+  low
+  medium
+  high
+}
+
+enum CorrectionStatus {
+  pending
+  approved
+  rejected
+}
+
+// ===== Models =====
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         Role     @default(freelancer)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedTasks       Task[]               @relation("TaskAssignee")
+  createdTasks        Task[]               @relation("TaskCreator")
+  timeEntries         TimeEntry[]
+  correctionsFiled    CorrectionRequest[]  @relation("CorrectionRequestor")
+  correctionsReviewed CorrectionRequest[]  @relation("CorrectionReviewer")
+  activityLogs        ActivityLog[]
+  sessions            Session[]
+  passwordResetTokens PasswordResetToken[]
+  requestersCreated   Requester[]
+  periodsLocked       PeriodLock[]
+}
+
+model Project {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tasks     Task[]
+}
+
+model WorkType {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  tasks     Task[]
+}
+
+model Requester {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  // Q6: tambah requester hanya Admin
+  creatorId String?
+  creator   User?    @relation(fields: [creatorId], references: [id])
+  createdAt DateTime @default(now())
+  tasks     Task[]
+}
+
+model Task {
+  id             String     @id @default(uuid())
+  title          String     @db.VarChar(150)
+  description    String? // HTML rich text (disanitasi via DOMPurify saat simpan)
+  projectId      String
+  project        Project    @relation(fields: [projectId], references: [id])
+  workTypeId     String
+  workType       WorkType   @relation(fields: [workTypeId], references: [id])
+  requesterId    String
+  requester      Requester  @relation(fields: [requesterId], references: [id])
+  requestDate    DateTime   @db.Date
+  priority       Priority   @default(medium)
+  assigneeId     String? // NULL = bucket bersama
+  assignee       User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  deadlineAt     DateTime
+  estimatedHours Decimal?   @db.Decimal(5, 1) // kelipatan 0,5
+  status         TaskStatus @default(todo)
+  createdById    String
+  createdBy      User       @relation("TaskCreator", fields: [createdById], references: [id])
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  timeEntries TimeEntry[]
+
+  @@index([status, assigneeId, deadlineAt])
+  @@index([projectId])
+  @@index([requesterId])
+}
+
+model TimeEntry {
+  id                   String      @id @default(uuid())
+  userId               String
+  user                 User        @relation(fields: [userId], references: [id])
+  taskId               String
+  task                 Task        @relation(fields: [taskId], references: [id])
+  clockInAt            DateTime // UTC
+  clockOutAt           DateTime? // NULL = sesi aktif
+  note                 String? // wajib saat clock out (min. 10 karakter); opsional saat switch (Q4)
+  taskStatusAtCheckout TaskStatus?
+  createdAt            DateTime    @default(now())
+
+  corrections CorrectionRequest[]
+
+  @@index([userId, clockOutAt])
+  @@index([taskId])
+  @@index([clockInAt])
+  // NOTE: partial unique index "satu sesi aktif per user" (business rule #2)
+  // dibuat via prisma/constraints.sql (Prisma tidak mendukung partial index di schema)
+}
+
+model CorrectionRequest {
+  id            String           @id @default(uuid())
+  timeEntryId   String
+  timeEntry     TimeEntry        @relation(fields: [timeEntryId], references: [id])
+  requestedById String
+  requestedBy   User             @relation("CorrectionRequestor", fields: [requestedById], references: [id])
+  // nilai usulan (nilai lama ada di timeEntry; audit lengkap di ActivityLog)
+  newClockInAt  DateTime?
+  newClockOutAt DateTime?
+  newTaskId     String?
+  reason        String
+  status        CorrectionStatus @default(pending)
+  reviewedById  String?
+  reviewedBy    User?            @relation("CorrectionReviewer", fields: [reviewedById], references: [id])
+  reviewedAt    DateTime?
+  reviewNote    String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+  action      String // clock_in | clock_out | switch_task | task_status_changed | ... (append-only)
+  entityType  String?
+  entityId    String?
+  oldValue    Json?
+  newValue    Json?
+  description String
+  createdAt   DateTime @default(now()) // UTC
+
+  @@index([createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@index([userId, createdAt(sort: Desc)])
+}
+
+model PeriodLock {
+  id        String   @id @default(uuid())
+  year      Int
+  month     Int
+  lockedById String
+  lockedBy  User     @relation(fields: [lockedById], references: [id])
+  note      String?
+  lockedAt  DateTime @default(now())
+
+  @@unique([year, month])
+}
+
+model Session {
+  id         String   @id // sha256(token dari cookie)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  expiresAt  DateTime // sliding 8 jam
+  lastSeenAt DateTime @default(now())
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+}
+
+model PasswordResetToken {
+  id        String    @id // sha256(token dari email)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  expiresAt DateTime // 1 jam
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}

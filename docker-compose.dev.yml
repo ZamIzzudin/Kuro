@@ -1,0 +1,19 @@
+# Notu — database development lokal
+# Pakai: docker compose -f docker-compose.dev.yml up -d
+# (tidak dipakai untuk produksi; produksi memakai service Postgres di Dokploy)
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: notu-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: notu
+      POSTGRES_PASSWORD: notu
+      POSTGRES_DB: notu
+    ports:
+      - '5432:5432'
+    volumes:
+      - notu-db-data:/var/lib/postgresql/data
+
+volumes:
+  notu-db-data:

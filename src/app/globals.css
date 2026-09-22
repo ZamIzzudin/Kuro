@@ -2,26 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ===== Notu design tokens (dari design-guideline.html — "Taskloop" v1.0) ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f4f4f7;
+  --surface: #ffffff;
+  --surface-2: #fafafb;
+  --border: #e9e8ee;
+  --border-soft: #f0eff4;
+  --ink-900: #17161d;
+  --ink-700: #3f3e47;
+  --ink-500: #6f6e78;
+  --ink-400: #9291a0;
+  --ink-300: #b7b6c0;
+
+  --brand-1: #8b2ff2;
+  --brand-2: #d926c8;
+  --brand-soft: #f4ecff;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    height: 100%;
+  }
+  body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink-900);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--brand-1);
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #dcdae4;
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
+@layer components {
+  /* Gradient brand — button primary, tab underline, brand mark */
+  .bg-brand-grad {
+    background-image: linear-gradient(135deg, var(--brand-1), var(--brand-2));
+  }
+  .text-brand-1 {
+    color: var(--brand-1);
+  }
+  /* Card dasar (shadow-sm) */
+  .card {
+    @apply rounded-lg border border-line bg-surface shadow-soft;
   }
 }

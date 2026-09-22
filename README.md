@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Notu — Freelancer Time & Task Tracker
 
-## Getting Started
+Web app clock in/out yang **terikat ke task**, dengan task bucket, dashboard aktivitas admin, rekap jam bulanan (XLSX/PDF), dan alur koreksi time entry.
 
-First, run the development server:
+- Rancangan lengkap: [`../RANCANGAN_PENGEMBANGAN.md`](../RANCANGAN_PENGEMBANGAN.md)
+- Design system: Taskloop v1.0 (`../design-guideline.html`) — brand gradient `#8B2FF2→#D926C8`, Plus Jakarta Sans, radius 8–22 + pill
+
+**Stack**: Next.js 14 (App Router, TypeScript) · Prisma + PostgreSQL 16 · Tailwind CSS · Nodemailer · SWR
+
+---
+
+## Status
+
+| Fase | Isi | Status |
+|---|---|---|
+| 0 | Skema DB, auth (login/logout/reset, session 8j, RBAC), shell UI, Dockerfile | ✅ Selesai |
+| 1 | Masters & User (CRUD) | ⏳ menyusul |
+| 2 | Task bucket (F1, F3) | ⏳ |
+| 3 | Clock in/out/switch (F2) | ⏳ |
+| 4 | Dashboard admin (F4) | ⏳ |
+| 5 | Rekap + export + lock periode (F5) | ⏳ |
+| 6 | Koreksi (F6) | ⏳ |
+| 7 | Hardening & release | ⏳ |
+
+## Setup development
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# 1. Dependensi
+npm install
+
+# 2. Database Postgres lokal (Docker)
+docker compose -f docker-compose.dev.yml up -d
+
+# 3. Environment
+cp .env.example .env   # sesuaikan bila perlu
+
+# 4. Skema + constraint + seed awal
+npm run db:push
+npm run db:constraints   # partial unique index: 1 sesi aktif per user
+npm run db:seed          # admin + master sample (+ SEED_DEMO=1 → freelancer demo)
+
+# 5. Jalankan
+npm run dev              # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Akun default (ubah via env sebelum seed): `admin@notu.local` / `admin12345` — ganti password setelah login pertama.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Skrip penting
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Skrip | Fungsi |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` | `prisma generate` + production build (standalone) |
+| `npm run db:push` | Sinkronkan skema Prisma ke DB |
+| `npm run db:constraints` | Terapkan partial unique index (rule: 1 sesi aktif) |
+| `npm run db:seed` | Akun admin awal + master sample |
+| `npm run db:studio` | Prisma Studio |
 
-## Learn More
+## Deploy (Dokploy)
 
-To learn more about Next.js, take a look at the following resources:
+1. Buat **service Postgres** di Dokploy (atau pakai yang sudah ada) → salin connection string.
+2. Buat aplikasi dari repo ini (build dari `Dockerfile`, port **3000**).
+3. Set env vars di panel Dokploy: `DATABASE_URL`, `APP_URL`, `SESSION_SECRET`, `SMTP_*` (opsional), `INITIAL_ADMIN_*`.
+4. Setelah deploy pertama, jalankan **sekali** dari terminal Dokploy (atau lokal dengan `DATABASE_URL` produksi):
+   ```bash
+   npx prisma db push
+   npx prisma db execute --file ./prisma/constraints.sql --schema ./prisma/schema.prisma
+   node prisma/seed.mjs   # butuh node_modules repo → jalankan dari repo lokal bila terminal Dokploy tidak memilikinya
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Catatan teknis
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Waktu**: semua disimpan UTC, ditampilkan WIB (`Asia/Jakarta`) — helper di `src/lib/time.ts` (fase berikutnya).
+- **Auth**: session cookie httpOnly (sliding 8 jam), token di DB berupa SHA-256 hash; reset password via token 1 jam sekali pakai; rate limit login & reset.
+- **RBAC**: role dicek di API (`requireApiUser`) dan server layout (`/admin`), bukan hanya UI.
+- **Audit**: semua aksi lewat `logActivity()` (`src/lib/activity.ts`) — tabel append-only.
+- **Tanpa SMTP di dev**: email reset dicetak ke console server (`[mail:dev]`).
