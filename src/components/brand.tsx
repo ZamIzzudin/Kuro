@@ -13,12 +13,21 @@ export function BrandMark({ size = 34 }: { size?: number }) {
 export function Brand({
   size = 34,
   subtitle,
+  compact,
   className,
 }: {
   size?: number
   subtitle?: string
+  compact?: boolean
   className?: string
 }) {
+  if (compact) {
+    return (
+      <div className={cn('flex justify-center', className)}>
+        <BrandMark size={size} />
+      </div>
+    )
+  }
   return (
     <div className={cn('flex items-center gap-2.5', className)}>
       <BrandMark size={size} />

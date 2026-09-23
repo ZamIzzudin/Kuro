@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react'
 import useSWR from 'swr'
 import { KeyRound, Pencil, Plus } from 'lucide-react'
 import { Button, ErrorNote, FieldLabel, Input, Select, Spinner, SuccessNote } from '@/components/ui'
-import { Modal } from '@/components/modal'
+import { Sheet } from '@/components/sheet'
 import { RoleBadge, StatusBadge } from '@/components/pills'
 import { apiSend, fetcher } from '@/lib/client'
 import { formatDateWIB } from '@/lib/time'
@@ -134,14 +134,14 @@ export function UsersClient() {
         )}
       </div>
 
-      <CreateModal open={createOpen} onClose={() => setCreateOpen(false)} onDone={() => mutate()} />
-      <EditModal user={editFor} onClose={() => setEditFor(null)} onDone={() => mutate()} />
-      <ResetModal user={resetFor} onClose={() => setResetFor(null)} />
+      <CreateSheet open={createOpen} onClose={() => setCreateOpen(false)} onDone={() => mutate()} />
+      <EditSheet user={editFor} onClose={() => setEditFor(null)} onDone={() => mutate()} />
+      <ResetSheet user={resetFor} onClose={() => setResetFor(null)} />
     </div>
   )
 }
 
-function CreateModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
+function CreateSheet({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'freelancer' })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -163,7 +163,7 @@ function CreateModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Tambah User">
+    <Sheet open={open} onClose={onClose} title="Tambah User">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <FieldLabel htmlFor="u-name">Nama</FieldLabel>
@@ -219,11 +219,11 @@ function CreateModal({ open, onClose, onDone }: { open: boolean; onClose: () => 
           </Button>
         </div>
       </form>
-    </Modal>
+    </Sheet>
   )
 }
 
-function EditModal({ user, onClose, onDone }: { user: UserRow | null; onClose: () => void; onDone: () => void }) {
+function EditSheet({ user, onClose, onDone }: { user: UserRow | null; onClose: () => void; onDone: () => void }) {
   const [name, setName] = useState('')
   const [role, setRole] = useState<'admin' | 'freelancer'>('freelancer')
   const [error, setError] = useState<string | null>(null)
@@ -255,7 +255,7 @@ function EditModal({ user, onClose, onDone }: { user: UserRow | null; onClose: (
   }
 
   return (
-    <Modal open={!!user} onClose={onClose} title="Edit User">
+    <Sheet open={!!user} onClose={onClose} title="Edit User">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <FieldLabel htmlFor="e-name">Nama</FieldLabel>
@@ -278,11 +278,11 @@ function EditModal({ user, onClose, onDone }: { user: UserRow | null; onClose: (
           </Button>
         </div>
       </form>
-    </Modal>
+    </Sheet>
   )
 }
 
-function ResetModal({ user, onClose }: { user: UserRow | null; onClose: () => void }) {
+function ResetSheet({ user, onClose }: { user: UserRow | null; onClose: () => void }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
@@ -311,11 +311,13 @@ function ResetModal({ user, onClose }: { user: UserRow | null; onClose: () => vo
   }
 
   return (
-    <Modal open={!!user} onClose={onClose} title={`Reset Password — ${user?.name ?? ''}`}>
+    <Sheet
+      open={!!user}
+      onClose={onClose}
+      title={`Reset Password — ${user?.name ?? ''}`}
+      description="Semua sesi aktif user ini akan dikeluarkan."
+    >
       <form onSubmit={submit} className="space-y-4">
-        <p className="text-sm text-ink-500">
-          Semua sesi aktif user ini akan dikeluarkan. Password baru minimal 8 karakter.
-        </p>
         <div>
           <FieldLabel htmlFor="r-pass">Password Baru</FieldLabel>
           <Input
@@ -339,6 +341,6 @@ function ResetModal({ user, onClose }: { user: UserRow | null; onClose: () => vo
           </Button>
         </div>
       </form>
-    </Modal>
+    </Sheet>
   )
 }

@@ -4,16 +4,16 @@ import { useState, type FormEvent } from 'react'
 import useSWR from 'swr'
 import { Pencil, Plus } from 'lucide-react'
 import { Button, ErrorNote, FieldLabel, Input, Spinner } from '@/components/ui'
-import { Modal } from '@/components/modal'
+import { Sheet } from '@/components/sheet'
 import { StatusBadge } from '@/components/pills'
 import { apiSend, fetcher } from '@/lib/client'
 
 type MasterItem = { id: string; name: string; isActive: boolean; createdAt: string }
 
 const TABS = [
-  { key: 'projects', label: 'Project', endpoint: '/api/projects', hint: 'Daftar klien/proyek aktif' },
+  { key: 'projects', label: 'Project', endpoint: '/api/projects', hint: 'Daftar klien/proyek — task selalu berada di dalam satu project' },
   { key: 'work-types', label: 'Jenis Pekerjaan', endpoint: '/api/work-types', hint: 'Kategori pekerjaan untuk label jam (mis. Desain, Revisi)' },
-  { key: 'requesters', label: 'Requester', endpoint: '/api/requesters', hint: 'Penanggung jawab di sisi klien' },
+  { key: 'requesters', label: 'Requester', endpoint: '/api/requesters', hint: 'Penanggung jawab di sisi klien — dipilih saat membuat task' },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
@@ -161,7 +161,7 @@ export function MastersClient() {
         </div>
       )}
 
-      <RenameModal
+      <RenameSheet
         item={renameFor}
         endpoint={active.endpoint}
         onClose={() => setRenameFor(null)}
@@ -171,7 +171,7 @@ export function MastersClient() {
   )
 }
 
-function RenameModal({
+function RenameSheet({
   item,
   endpoint,
   onClose,
@@ -211,7 +211,7 @@ function RenameModal({
   }
 
   return (
-    <Modal open={!!item} onClose={onClose} title="Ubah Nama">
+    <Sheet open={!!item} onClose={onClose} title="Ubah Nama">
       <form onSubmit={submit} className="space-y-4">
         <div>
           <FieldLabel htmlFor="rn-name">Nama</FieldLabel>
@@ -227,6 +227,6 @@ function RenameModal({
           </Button>
         </div>
       </form>
-    </Modal>
+    </Sheet>
   )
 }

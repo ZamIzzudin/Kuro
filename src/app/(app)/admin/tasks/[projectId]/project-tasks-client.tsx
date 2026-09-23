@@ -1,26 +1,13 @@
 'use client'
 
 import { useMemo, useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import useSWR from 'swr'
-import { Ban, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, Ban, Pencil, Plus } from 'lucide-react'
 import type { Priority, TaskStatus } from '@prisma/client'
-import {
-  Button,
-  ErrorNote,
-  FieldLabel,
-  Input,
-  Select,
-  Spinner,
-  Textarea,
-} from '@/components/ui'
-import { Modal } from '@/components/modal'
-import {
-  OverdueBadge,
-  PriorityBadge,
-  STATUS_META,
-  StatusPill,
-  TaskProgress,
-} from '@/components/task-bits'
+import { Button, ErrorNote, FieldLabel, Input, Select, Spinner, Textarea } from '@/components/ui'
+import { Sheet } from '@/components/sheet'
+import { OverdueBadge, PriorityBadge, STATUS_META, StatusPill, TaskProgress } from '@/components/task-bits'
 import { apiSend, fetcher } from '@/lib/client'
 import { dateToWibLocal, formatDateWIB, todayWibDate } from '@/lib/time'
 import type { TaskItem } from '@/lib/tasks'
@@ -28,55 +15,91 @@ import type { TaskItem } from '@/lib/tasks'
 type MasterOption = { id: string; name: string; isActive: boolean }
 type UserRow = { id: string; name: string; role: 'admin' | 'freelancer'; isActive: boolean }
 
-export function TasksClient() {
-  const tasksReq = useSWR<{ tasks: TaskItem[] }>('/api/tasks', fetcher)
+export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
+  const tasksReq = useSWR<{ tasks: TaskItem[] }>(`/api/tasks?projectId=${projectId}`, fetcher)
   const usersReq = useSWR<{ users: UserRow[] }>('/api/users', fetcher)
-  const projectsReq = useSWR<{ items: MasterOption[] }>('/api/projects', fetcher)
   const workTypesReq = useSWR<{ items: MasterOption[] }>('/api/work-types', fetcher)
   const requestersReq = useSWR<{ items: MasterOption[] }>('/api/requesters', fetcher)
 
   const [q, setQ] = useState('')
   const [fStatus, setFStatus] = useState('all')
   const [fAssignee, setFAssignee] = useState('all')
-  const [fProject, setFProject] = useState('all')
+  const [fRequester, setFRequester] = useState('all')
   const [formTarget, setFormTarget] = useState<TaskItem | 'create' | null>(null)
   const [cancelFor, setCancelFor] = useState<TaskItem | null>(null)
   const [rowError, setRowError] = useState<string | null>(null)
 
   const tasks = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data])
   const freelancers = (usersReq.data?.users ?? []).filter((u) => u.role === 'freelancer')
-  const projects = projectsReq.data?.items ?? []
   const workTypes = workTypesReq.data?.items ?? []
   const requesters = requestersReq.data?.items ?? []
+  const projectName = tasks[0]?.project.name
 
-  const rows = useMemo(
-    () =>
-      tasks.filter(
-        (t) =>
-          (q.trim() === '' || t.title.toLowerCase().includes(q.trim().toLowerCase())) &&
-          (fStatus === 'all' || t.status === fStatus) &&
-          (fAssignee === 'all' ||
-            (fAssignee === 'unassigned' ? t.assigneeId === null : t.assigneeId === fAssignee)) &&
-          (fProject === 'all' || t.projectId === fProject)
-      ),
-    [tasks, q, fStatus, fAssignee, fProject]
+  const rows = tasks.filter(
+    (t) =>
+      (q.trim() === '' || t.title.toLowerCase().includes(q.trim().toLowerCase())) &&
+      (fStatus === 'all' || t.status === fStatus) &&
+      (fRequester === 'all' || t.requesterId === fRequester) &&
+      (fAssignee === 'all' ||
+        (fAssignee === 'unassigned' ? t.assigneeId === null : t.assigneeId === fAssignee))
   )
 
-  const ready = tasksReq.data && usersReq.data && projectsReq.data && workTypesReq.data && requestersReq.data
+  const loadError = tasksReq.error || usersReq.error || workTypesReq.error || requestersReq.error
+  const canCreate = !workTypesReq.isLoading && workTypes.length > 0 && requesters.length > 0
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <Link
+        href="/admin/tasks"
+        className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-ink-500 hover:text-brand-1"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Semua project
+      </Link>
+
+      <div className="mt-3 mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-heading text-[22px] font-extrabold">Task</h1>
-          <p className="mt-1 text-sm text-ink-500">Buat, assign, dan kelola seluruh task tim</p>
+          <h1 className="font-heading text-[22px] font-extrabold">
+            {projectName ?? 'Memuat project…'}
+          </h1>
+          <p className="mt-1 text-sm text-ink-500">{tasks.length} task di project ini</p>
         </div>
-        <Button onClick={() => setFormTarget('create')}>
+        <Button onClick={() => setFormTarget('create')} disabled={!canCreate}>
           <Plus className="h-4 w-4" strokeWidth={2.4} /> Buat Task
         </Button>
       </div>
 
-      {/* Filter */}
+      {loadError && (
+        <div className="mb-4">
+          <ErrorNote>
+            {loadError instanceof Error ? loadError.message : 'Gagal memuat data'}
+          </ErrorNote>
+        </div>
+      )}
+
+      {!workTypesReq.isLoading && workTypes.length === 0 && (
+        <div className="mb-4">
+          <ErrorNote>
+            Belum ada jenis pekerjaan aktif. Tambahkan dulu di{' '}
+            <Link href="/admin/masters" className="underline">
+              Master → Jenis Pekerjaan
+            </Link>
+            .
+          </ErrorNote>
+        </div>
+      )}
+
+      {!requestersReq.isLoading && requesters.length === 0 && (
+        <div className="mb-4">
+          <ErrorNote>
+            Belum ada requester aktif. Tambahkan dulu di{' '}
+            <Link href="/admin/masters" className="underline">
+              Master → Requester
+            </Link>
+            .
+          </ErrorNote>
+        </div>
+      )}
+
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-56">
           <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">Cari judul</span>
@@ -94,25 +117,26 @@ export function TasksClient() {
           </Select>
         </div>
         <div className="w-48">
-          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">Assignee</span>
-          <Select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)}>
-            <option value="all">Semua assignee</option>
-            <option value="unassigned">Bucket bersama</option>
-            {freelancers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-                {u.isActive ? '' : ' (nonaktif)'}
+          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">Requester</span>
+          <Select value={fRequester} onChange={(e) => setFRequester(e.target.value)}>
+            <option value="all">Semua requester</option>
+            {requesters.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+                {r.isActive ? '' : ' (nonaktif)'}
               </option>
             ))}
           </Select>
         </div>
-        <div className="w-52">
-          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">Project</span>
-          <Select value={fProject} onChange={(e) => setFProject(e.target.value)}>
-            <option value="all">Semua project</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
+        <div className="w-48">
+          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">Assignee</span>
+          <Select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)}>
+            <option value="all">Semua assignee</option>
+            <option value="unassigned">Belum di-assign</option>
+            {freelancers.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+                {u.isActive ? '' : ' (nonaktif)'}
               </option>
             ))}
           </Select>
@@ -126,24 +150,25 @@ export function TasksClient() {
       )}
 
       <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-sm">
-        {!ready ? (
+        {tasksReq.isLoading ? (
           <div className="flex items-center justify-center py-16 text-ink-400">
-            <Spinner /> <span className="ml-3 text-sm font-semibold">Memuat…</span>
+            <Spinner /> <span className="ml-3 text-sm font-semibold">Memuat task…</span>
           </div>
         ) : rows.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-sm font-bold text-ink-700">Tidak ada task</p>
             <p className="mt-1 text-sm text-ink-500">
               {tasks.length === 0
-                ? 'Klik “Buat Task” untuk menambah task pertama.'
+                ? 'Klik “Buat Task” untuk menambah task pertama di project ini.'
                 : 'Coba ubah filter pencarian.'}
             </p>
           </div>
         ) : (
-          <table className="w-full min-w-[960px] text-sm">
+          <table className="w-full min-w-[900px] text-sm">
             <thead>
               <tr className="bg-surface-2/60 text-left text-[11px] font-bold uppercase tracking-wider text-ink-400">
                 <th className="px-5 py-3">Task</th>
+                <th className="px-5 py-3">Requester</th>
                 <th className="px-5 py-3">Assignee</th>
                 <th className="px-5 py-3">Status</th>
                 <th className="px-5 py-3">Prioritas</th>
@@ -157,15 +182,21 @@ export function TasksClient() {
                 <tr key={t.id} className="border-t border-line align-top transition hover:bg-surface-2/50">
                   <td className="px-5 py-3.5">
                     <p className="font-bold text-ink-900">{t.title}</p>
-                    <p className="mt-0.5 text-[12.5px] text-ink-500">
-                      {t.project.name} · {t.workType.name}
-                    </p>
+                    <p className="mt-0.5 text-[12.5px] text-ink-500">{t.workType.name}</p>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="text-ink-700">{t.requester.name}</span>
                   </td>
                   <td className="px-5 py-3.5">
                     {t.assignee ? (
-                      <span className="text-ink-700">{t.assignee.name}</span>
+                      <span className="text-ink-700">
+                        {t.assignee.name}
+                        {freelancers.find((u) => u.id === t.assigneeId && !u.isActive) && (
+                          <span className="ml-1 text-[11.5px] text-ink-400">(nonaktif)</span>
+                        )}
+                      </span>
                     ) : (
-                      <span className="text-[12.5px] font-semibold text-ink-400">Bucket bersama</span>
+                      <span className="text-[12.5px] font-semibold text-ink-400">Belum di-assign</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5">
@@ -203,11 +234,12 @@ export function TasksClient() {
       </div>
 
       {formTarget && (
-        <TaskFormModal
+        <TaskFormSheet
           key={formTarget === 'create' ? 'create' : formTarget.id}
           initial={formTarget === 'create' ? null : formTarget}
+          projectId={projectId}
+          projectName={projectName ?? ''}
           freelancers={freelancers}
-          projects={projects.filter((p) => p.isActive)}
           workTypes={workTypes.filter((w) => w.isActive)}
           requesters={requesters.filter((r) => r.isActive)}
           onClose={() => setFormTarget(null)}
@@ -215,7 +247,7 @@ export function TasksClient() {
         />
       )}
 
-      <CancelModal
+      <CancelSheet
         task={cancelFor}
         onClose={() => setCancelFor(null)}
         onDone={() => tasksReq.mutate()}
@@ -225,18 +257,20 @@ export function TasksClient() {
   )
 }
 
-function TaskFormModal({
+function TaskFormSheet({
   initial,
+  projectId,
+  projectName,
   freelancers,
-  projects,
   workTypes,
   requesters,
   onClose,
   onDone,
 }: {
   initial: TaskItem | null
+  projectId: string
+  projectName: string
   freelancers: UserRow[]
-  projects: MasterOption[]
   workTypes: MasterOption[]
   requesters: MasterOption[]
   onClose: () => void
@@ -244,7 +278,6 @@ function TaskFormModal({
 }) {
   const [title, setTitle] = useState(initial?.title ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [projectId, setProjectId] = useState(initial?.projectId ?? projects[0]?.id ?? '')
   const [workTypeId, setWorkTypeId] = useState(initial?.workTypeId ?? workTypes[0]?.id ?? '')
   const [requesterId, setRequesterId] = useState(initial?.requesterId ?? requesters[0]?.id ?? '')
   const [assigneeId, setAssigneeId] = useState(initial?.assigneeId ?? '')
@@ -295,7 +328,13 @@ function TaskFormModal({
   }
 
   return (
-    <Modal open onClose={onClose} title={isEdit ? 'Edit Task' : 'Buat Task'}>
+    <Sheet
+      open
+      onClose={onClose}
+      size="lg"
+      title={isEdit ? 'Edit Task' : 'Buat Task'}
+      description={isEdit ? projectName : `Project: ${projectName}`}
+    >
       <form onSubmit={submit} className="space-y-4">
         <div>
           <FieldLabel htmlFor="t-title">Judul</FieldLabel>
@@ -323,17 +362,6 @@ function TaskFormModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <FieldLabel htmlFor="t-project">Project</FieldLabel>
-            <Select id="t-project" required value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              {projects.length === 0 && <option value="">— Belum ada project aktif —</option>}
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
             <FieldLabel htmlFor="t-worktype">Jenis Pekerjaan</FieldLabel>
             <Select id="t-worktype" required value={workTypeId} onChange={(e) => setWorkTypeId(e.target.value)}>
               {workTypes.length === 0 && <option value="">— Belum ada jenis pekerjaan —</option>}
@@ -346,7 +374,12 @@ function TaskFormModal({
           </div>
           <div>
             <FieldLabel htmlFor="t-requester">Requester</FieldLabel>
-            <Select id="t-requester" required value={requesterId} onChange={(e) => setRequesterId(e.target.value)}>
+            <Select
+              id="t-requester"
+              required
+              value={requesterId}
+              onChange={(e) => setRequesterId(e.target.value)}
+            >
               {requesters.length === 0 && <option value="">— Belum ada requester —</option>}
               {requesters.map((r) => (
                 <option key={r.id} value={r.id}>
@@ -358,7 +391,7 @@ function TaskFormModal({
           <div>
             <FieldLabel htmlFor="t-assignee">Assignee</FieldLabel>
             <Select id="t-assignee" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-              <option value="">Bucket bersama (belum di-assign)</option>
+              <option value="">Belum di-assign (bucket bersama)</option>
               {freelancers
                 .filter((u) => u.isActive)
                 .map((u) => (
@@ -370,11 +403,7 @@ function TaskFormModal({
           </div>
           <div>
             <FieldLabel htmlFor="t-priority">Prioritas</FieldLabel>
-            <Select
-              id="t-priority"
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as Priority)}
-            >
+            <Select id="t-priority" value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
@@ -416,11 +445,7 @@ function TaskFormModal({
           {isEdit && (
             <div>
               <FieldLabel htmlFor="t-status">Status</FieldLabel>
-              <Select
-                id="t-status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              >
+              <Select id="t-status" value={status} onChange={(e) => setStatus(e.target.value as TaskStatus)}>
                 {(['todo', 'in_progress', 'review', 'done', 'cancelled'] as TaskStatus[]).map((s) => (
                   <option key={s} value={s}>
                     {STATUS_META[s].label}
@@ -441,11 +466,11 @@ function TaskFormModal({
           </Button>
         </div>
       </form>
-    </Modal>
+    </Sheet>
   )
 }
 
-function CancelModal({
+function CancelSheet({
   task,
   onClose,
   onDone,
@@ -477,7 +502,7 @@ function CancelModal({
   }
 
   return (
-    <Modal open={!!task} onClose={onClose} title="Batalkan Task">
+    <Sheet open={!!task} onClose={onClose} title="Batalkan Task">
       <div className="space-y-4">
         <p className="text-sm text-ink-700">
           Yakin membatalkan <span className="font-bold">“{task?.title}”</span>? Status akan menjadi{' '}
@@ -488,15 +513,11 @@ function CancelModal({
           <Button variant="secondary" onClick={onClose}>
             Kembali
           </Button>
-          <Button
-            variant="danger"
-            loading={saving}
-            onClick={confirm}
-          >
+          <Button variant="danger" loading={saving} onClick={confirm}>
             Ya, Batalkan
           </Button>
         </div>
       </div>
-    </Modal>
+    </Sheet>
   )
 }

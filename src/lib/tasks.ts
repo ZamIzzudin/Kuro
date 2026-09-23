@@ -66,8 +66,7 @@ export function mapTask(t: TaskWithRelations): TaskItem {
     requester: { name: t.requester.name },
     assignee: t.assignee ? { id: t.assignee.id, name: t.assignee.name } : null,
     loggedMinutes,
-    overdue:
-      t.deadlineAt < new Date() && t.status !== 'done' && t.status !== 'cancelled',
+    overdue: t.deadlineAt < new Date() && t.status !== 'done' && t.status !== 'cancelled',
   }
 }
 
@@ -86,4 +85,22 @@ export function sortTasks(items: TaskItem[]): TaskItem[] {
 /** Ambil task + relasi */
 export function findTask(id: string) {
   return db.task.findUnique({ where: { id }, include: TASK_INCLUDE })
+}
+
+/** Statistik task per project (untuk halaman pemilihan project) */
+export type ProjectOverview = {
+  id: string
+  name: string
+  isActive: boolean
+  /** jumlah task yang terlihat oleh user */
+  total: number
+  /** task belum selesai (todo + in_progress + review) */
+  active: number
+  overdue: number
+  /** task yang di-assign ke user ini */
+  mine: number
+  /** task bucket bersama (belum di-assign) */
+  unassigned: number
+  progressPct: number
+  counts: { todo: number; in_progress: number; review: number; done: number; cancelled: number }
 }

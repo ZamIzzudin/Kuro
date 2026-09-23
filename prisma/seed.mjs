@@ -41,7 +41,9 @@ async function main() {
       create: { name, creatorId: admin.id },
     })
   }
-  console.log(`✔ Master sample siap: ${projects.length} project, ${workTypes.length} jenis pekerjaan, ${requesters.length} requester`)
+  console.log(
+    `✔ Master sample siap: ${projects.length} project, ${workTypes.length} jenis pekerjaan, ${requesters.length} requester`
+  )
 
   if (process.env.SEED_DEMO === '1') {
     const demoEmail = 'freelancer@notu.local'

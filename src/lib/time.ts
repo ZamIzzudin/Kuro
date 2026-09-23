@@ -57,3 +57,19 @@ export function formatMinutes(totalMinutes: number): string {
   if (m === 0) return `${h}j`
   return `${h}j ${m}m`
 }
+
+/** Detik → "HH:MM:SS" untuk timer berjalan */
+export function formatTimer(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds))
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(h)}:${pad(m)}:${pad(sec)}`
+}
+
+/** Tahun & bulan (WIB) dari sebuah tanggal — untuk cek period lock */
+export function wibYearMonth(date: Date | string): { year: number; month: number } {
+  const [y, m] = formatInTimeZone(new Date(date), TZ, 'yyyy-MM').split('-')
+  return { year: Number(y), month: Number(m) }
+}

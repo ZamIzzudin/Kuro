@@ -96,3 +96,26 @@ export const taskUpdateSchema = z.object({
 export const taskStatusSchema = z.object({
   status: z.enum(TASK_STATUS_OPTIONS, { errorMap: () => ({ message: 'Status tidak valid' }) }),
 })
+
+// ===== Fase 3: Time Entries (F2) =====
+
+/** Status task yang boleh dipilih saat clock out (rule #9) */
+export const CHECKOUT_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'done'] as const
+
+export const clockInSchema = z.object({
+  taskId: z.string().min(1, 'Task wajib dipilih'),
+})
+
+export const switchTaskSchema = z.object({
+  taskId: z.string().min(1, 'Task wajib dipilih'),
+  // Q4: note saat switch OPSIONAL
+  note: z.string().trim().max(1000, 'Catatan maksimal 1000 karakter').optional().nullable(),
+})
+
+export const clockOutSchema = z.object({
+  // rule #9: note wajib minimal 10 karakter
+  note: z.string().trim().min(10, 'Catatan minimal 10 karakter').max(2000, 'Catatan maksimal 2000 karakter'),
+  taskStatus: z.enum(CHECKOUT_STATUS_OPTIONS, {
+    errorMap: () => ({ message: 'Status task tidak valid' }),
+  }),
+})
