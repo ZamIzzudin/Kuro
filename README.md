@@ -19,7 +19,7 @@ Web app clock in/out yang **terikat ke task**, dengan task bucket, dashboard akt
 | 2b | Requester + UX per-project + Sheet & sidebar collapsible | ✅ Selesai |
 | 3 | Clock in/out/switch (F2) — widget timer, riwayat jam kerja | ✅ Selesai |
 | 4 | Dashboard admin (F4) — live status, ringkasan, chart 30 hari, feed | ✅ Selesai |
-| 5 | Rekap + export + lock periode (F5) | ⏳ |
+| 5 | Rekap + export XLSX/PDF + lock periode (F5) | ✅ Selesai |
 | 6 | Koreksi (F6) | ⏳ |
 | 7 | Hardening & release | ⏳ |
 
@@ -76,6 +76,7 @@ Akun default (ubah via env sebelum seed): `admin@notu.local` / `admin12345` — 
 - **Dialog**: semua memakai `Sheet` (`src/components/sheet.tsx`) — drawer dari kanan di desktop, bottom sheet di mobile.
 - **Sidebar**: bisa di-collapse (rail 76px) dan preferensi disimpan di `localStorage`.
 - **Waktu**: semua disimpan UTC, ditampilkan WIB (`Asia/Jakarta`) — helper di `src/lib/time.ts`.
+- **Rekap & export**: rekap dihitung dari entry yang sudah clock out, dibulatkan ke bawah per menit; XLSX via ExcelJS (4 sheet), PDF via puppeteer-core. Di lokal, Chromium/Chrome/Edge dicari otomatis; di Docker sudah diarahkan ke chromium sistem (`PUPPETEER_EXECUTABLE_PATH`).
 - **Auth**: session cookie httpOnly (sliding 8 jam), token di DB berupa SHA-256 hash; reset password via token 1 jam sekali pakai; rate limit login & reset.
 - **RBAC**: role dicek di API (`requireApiUser`) dan server layout (`/admin`), bukan hanya UI.
 - **Audit**: semua aksi lewat `logActivity()` (`src/lib/activity.ts`) — tabel append-only.

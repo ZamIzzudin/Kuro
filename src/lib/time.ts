@@ -73,3 +73,24 @@ export function wibYearMonth(date: Date | string): { year: number; month: number
   const [y, m] = formatInTimeZone(new Date(date), TZ, 'yyyy-MM').split('-')
   return { year: Number(y), month: Number(m) }
 }
+
+/** Nama bulan Bahasa Indonesia (indeks 0 = Januari) */
+export const MONTH_NAMES = [
+  'Januari',
+  'Februari',
+  'Maret',
+  'April',
+  'Mei',
+  'Juni',
+  'Juli',
+  'Agustus',
+  'September',
+  'Oktober',
+  'November',
+  'Desember',
+]
+
+/** Label periode, contoh: "September 2026" */
+export function periodLabel(year: number, month: number): string {
+  return `${MONTH_NAMES[month - 1]} ${year}`
+}

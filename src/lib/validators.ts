@@ -119,3 +119,45 @@ export const clockOutSchema = z.object({
     errorMap: () => ({ message: 'Status task tidak valid' }),
   }),
 })
+
+// ===== Fase 5: Rekap & Export / Period Lock (F5) =====
+
+const yearField = z
+  .number({ invalid_type_error: 'Tahun tidak valid' })
+  .int('Tahun tidak valid')
+  .min(2000, 'Tahun tidak valid')
+  .max(2100, 'Tahun tidak valid')
+
+const monthField = z
+  .number({ invalid_type_error: 'Bulan tidak valid' })
+  .int('Bulan tidak valid')
+  .min(1, 'Bulan tidak valid')
+  .max(12, 'Bulan tidak valid')
+
+/** Periode tahun/bulan (query string) */
+export const periodQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  month: z.coerce.number().int().min(1).max(12).optional(),
+})
+
+export const reportQuerySchema = z.object({
+  year: z.coerce.number().int().min(2000).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+  userIds: z.string().optional(),
+})
+
+export const exportQuerySchema = reportQuerySchema.extend({
+  format: z.enum(['xlsx', 'pdf'], { errorMap: () => ({ message: 'Format export tidak valid' }) }),
+})
+
+export const periodLockCreateSchema = z.object({
+  year: yearField,
+  month: monthField,
+  note: z.string().trim().max(300, 'Catatan maksimal 300 karakter').optional().nullable(),
+})
+
+export const periodLockDeleteSchema = z.object({
+  reason: z.string().trim().min(5, 'Alasan minimal 5 karakter').max(300, 'Alasan maksimal 300 karakter'),
+})
+
+export type Period = { year: number; month: number }
