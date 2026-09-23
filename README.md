@@ -18,7 +18,7 @@ Web app clock in/out yang **terikat ke task**, dengan task bucket, dashboard akt
 | 2 | Task bucket per-project (F1, F3) | ✅ Selesai |
 | 2b | Requester + UX per-project + Sheet & sidebar collapsible | ✅ Selesai |
 | 3 | Clock in/out/switch (F2) — widget timer, riwayat jam kerja | ✅ Selesai |
-| 4 | Dashboard admin (F4) | ⏳ |
+| 4 | Dashboard admin (F4) — live status, ringkasan, chart 30 hari, feed | ✅ Selesai |
 | 5 | Rekap + export + lock periode (F5) | ⏳ |
 | 6 | Koreksi (F6) | ⏳ |
 | 7 | Hardening & release | ⏳ |
