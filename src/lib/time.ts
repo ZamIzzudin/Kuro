@@ -1,6 +1,6 @@
 // Notu — helper waktu (business rule #5: simpan UTC, tampil WIB)
 import { id as idLocale } from 'date-fns/locale'
-import { formatInTimeZone } from 'date-fns-tz'
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 
 export const TZ = 'Asia/Jakarta' // WIB
 
@@ -12,6 +12,36 @@ export function formatWIB(date: Date | string, fmt = 'dd MMM yyyy HH.mm'): strin
 /** Format tanggal saja dalam WIB, contoh: "22 Sep 2025" */
 export function formatDateWIB(date: Date | string): string {
   return formatWIB(date, 'dd MMM yyyy')
+}
+
+/** Format tanggal pendek, contoh: "22 Sep" */
+export function formatDateShortWIB(date: Date | string): string {
+  return formatWIB(date, 'dd MMM')
+}
+
+/** Input datetime-local (WIB) → Date UTC untuk disimpan (rule #5) */
+export function wibLocalToDate(local: string): Date {
+  return fromZonedTime(local, TZ)
+}
+
+/** Date → string datetime-local (WIB) untuk prefill form */
+export function dateToWibLocal(date: Date | string): string {
+  return formatInTimeZone(new Date(date), TZ, "yyyy-MM-dd'T'HH:mm")
+}
+
+/** Date → string tanggal (yyyy-MM-dd) WIB untuk input date / kolom @db.Date */
+export function dateToWibDate(date: Date | string): string {
+  return formatInTimeZone(new Date(date), TZ, 'yyyy-MM-dd')
+}
+
+/** Tanggal hari ini (WIB) sebagai yyyy-MM-dd */
+export function todayWibDate(): string {
+  return dateToWibDate(new Date())
+}
+
+/** Tanggal yyyy-MM-dd → Date pukul 00:00 UTC (untuk kolom @db.Date) */
+export function dateOnlyUTC(localDate: string): Date {
+  return new Date(`${localDate}T00:00:00.000Z`)
 }
 
 /** Durasi dalam menit (dibulatkan ke bawah, rule #4) */

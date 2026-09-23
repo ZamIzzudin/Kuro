@@ -14,7 +14,7 @@ Web app clock in/out yang **terikat ke task**, dengan task bucket, dashboard akt
 | Fase | Isi | Status |
 |---|---|---|
 | 0 | Skema DB, auth (login/logout/reset, session 8j, RBAC), shell UI, Dockerfile | ✅ Selesai |
-| 1 | Masters & User (CRUD) | ⏳ menyusul |
+| 1 | Masters & User (CRUD) | ✅ Selesai |
 | 2 | Task bucket (F1, F3) | ⏳ |
 | 3 | Clock in/out/switch (F2) | ⏳ |
 | 4 | Dashboard admin (F4) | ⏳ |

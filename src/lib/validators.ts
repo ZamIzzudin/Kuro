@@ -50,3 +50,49 @@ export const masterUpdateSchema = z
   .refine((v) => v.name !== undefined || v.isActive !== undefined, {
     message: 'Tidak ada perubahan',
   })
+
+// ===== Fase 2: Task =====
+
+export const TASK_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'done'] as const
+
+const estimatedHoursField = z
+  .number({ invalid_type_error: 'Estimasi harus berupa angka' })
+  .positive('Estimasi harus lebih dari 0')
+  .max(500, 'Estimasi maksimal 500 jam')
+  .refine((v) => (v * 2) % 1 === 0, 'Estimasi harus kelipatan 0,5 jam')
+
+const dateOnlyField = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Format tanggal tidak valid')
+const dateTimeField = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Format tanggal & jam tidak valid')
+
+export const taskCreateSchema = z.object({
+  title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120, 'Judul maksimal 120 karakter'),
+  description: z.string().trim().max(2000, 'Deskripsi maksimal 2000 karakter').optional().nullable(),
+  projectId: z.string().min(1, 'Project wajib dipilih'),
+  workTypeId: z.string().min(1, 'Jenis pekerjaan wajib dipilih'),
+  requesterId: z.string().min(1, 'Requester wajib dipilih'),
+  assigneeId: z.string().optional().nullable(),
+  priority: z.enum(['high', 'medium', 'low']).default('medium'),
+  estimatedHours: estimatedHoursField.optional().nullable(),
+  requestDateLocal: dateOnlyField,
+  deadlineLocal: dateTimeField,
+})
+
+export const taskUpdateSchema = z.object({
+  title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120).optional(),
+  description: z.string().trim().max(2000).optional().nullable(),
+  projectId: z.string().min(1).optional(),
+  workTypeId: z.string().min(1).optional(),
+  requesterId: z.string().min(1).optional(),
+  assigneeId: z.string().optional().nullable(),
+  priority: z.enum(['high', 'medium', 'low']).optional(),
+  estimatedHours: estimatedHoursField.optional().nullable(),
+  requestDateLocal: dateOnlyField.optional(),
+  deadlineLocal: dateTimeField.optional(),
+  status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
+})
+
+export const taskStatusSchema = z.object({
+  status: z.enum(TASK_STATUS_OPTIONS, { errorMap: () => ({ message: 'Status tidak valid' }) }),
+})

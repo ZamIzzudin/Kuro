@@ -24,7 +24,10 @@ type MasterItemRow = {
 
 // Interface minimal (cast) supaya 3 delegate Prisma bisa dipakai lewat satu tipe
 interface MasterDelegate {
-  findMany(args: { orderBy: { name: 'asc' } }): Promise<MasterItemRow[]>
+  findMany(args?: {
+    where?: { isActive: boolean }
+    orderBy: { name: 'asc' }
+  }): Promise<MasterItemRow[]>
   create(args: { data: { name: string; creatorId?: string } }): Promise<MasterItemRow>
   findUnique(args: { where: { id: string } }): Promise<MasterItemRow | null>
   update(args: { where: { id: string }; data: { name?: string; isActive?: boolean } }): Promise<MasterItemRow>
@@ -44,11 +47,14 @@ export function masterHandlers(key: MasterKey) {
   const model = table(key)
 
   return {
-    /** GET — daftar semua (termasuk nonaktif), urut nama */
+    /** GET — daftar: admin lihat semua; freelancer hanya yang aktif (untuk filter/form) */
     async GET() {
-      const { error } = await requireApiUser(['admin'])
+      const { user, error } = await requireApiUser()
       if (error) return error
-      const items = await model.findMany({ orderBy: { name: 'asc' } })
+      const items =
+        user.role === 'admin'
+          ? await model.findMany({ orderBy: { name: 'asc' } })
+          : await model.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } })
       return NextResponse.json({ items })
     },
 

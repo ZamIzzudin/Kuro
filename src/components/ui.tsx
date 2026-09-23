@@ -1,7 +1,7 @@
 // Komponen UI dasar Notu — mengikuti design guideline (button pill, input radius 12)
 'use client'
 
-import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes } from 'react'
+import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { cn } from '@/lib/utils'
 
 export function Spinner({ className }: { className?: string }) {
@@ -84,6 +84,22 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
       >
         {children}
       </select>
+    )
+  }
+)
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className, ...rest }, ref) {
+    return (
+      <textarea
+        ref={ref}
+        className={cn(
+          'w-full rounded-md border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-ink-900 outline-none transition placeholder:text-ink-300 focus:border-brand-1',
+          className
+        )}
+        rows={4}
+        {...rest}
+      />
     )
   }
 )
