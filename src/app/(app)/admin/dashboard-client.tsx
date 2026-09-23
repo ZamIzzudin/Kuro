@@ -52,6 +52,11 @@ const ACTION_META: Record<string, string> = {
   master_created: 'Master Baru',
   master_updated: 'Master Diubah',
   time_entry_edited: 'Entry Diedit',
+  correction_submitted: 'Koreksi Diajukan',
+  correction_approved: 'Koreksi Disetujui',
+  correction_rejected: 'Koreksi Ditolak',
+  period_locked: 'Periode Dikunci',
+  period_unlocked: 'Kunci Dibuka',
   auth_login: 'Login',
   auth_logout: 'Logout',
 }

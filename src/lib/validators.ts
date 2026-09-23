@@ -161,3 +161,57 @@ export const periodLockDeleteSchema = z.object({
 })
 
 export type Period = { year: number; month: number }
+
+// ===== Fase 6: Koreksi (F6) =====
+
+/** Pengajuan koreksi oleh freelancer — minimal satu usulan perubahan */
+export const correctionCreateSchema = z
+  .object({
+    timeEntryId: z.string().min(1, 'Time entry wajib dipilih'),
+    newClockInLocal: dateTimeField.optional().nullable(),
+    newClockOutLocal: dateTimeField.optional().nullable(),
+    newTaskId: z.string().min(1).optional().nullable(),
+    reason: z
+      .string({ required_error: 'Alasan wajib diisi', invalid_type_error: 'Alasan wajib diisi' })
+      .trim()
+      .min(10, 'Alasan minimal 10 karakter')
+      .max(1000, 'Alasan maksimal 1000 karakter'),
+  })
+  .refine((v) => !!v.newClockInLocal || !!v.newClockOutLocal || !!v.newTaskId, {
+    message: 'Isi minimal satu perubahan (jam masuk, jam keluar, atau task)',
+  })
+
+export type CorrectionCreateInput = z.infer<typeof correctionCreateSchema>
+
+/** Admin menolak koreksi — wajib catatan review */
+export const correctionRejectSchema = z.object({
+  reviewNote: z
+    .string({ required_error: 'Catatan review wajib diisi', invalid_type_error: 'Catatan review wajib diisi' })
+    .trim()
+    .min(5, 'Catatan minimal 5 karakter')
+    .max(500, 'Catatan maksimal 500 karakter'),
+})
+
+/** Edit langsung time entry oleh admin (Q5) — wajib alasan, ter-audit */
+export const timeEntryEditSchema = z
+  .object({
+    clockInLocal: dateTimeField.optional(),
+    clockOutLocal: dateTimeField.optional().nullable(),
+    taskId: z.string().min(1).optional(),
+    note: z.string().trim().max(2000, 'Catatan maksimal 2000 karakter').optional().nullable(),
+    reason: z
+      .string({ required_error: 'Alasan wajib diisi', invalid_type_error: 'Alasan wajib diisi' })
+      .trim()
+      .min(5, 'Alasan minimal 5 karakter')
+      .max(300, 'Alasan maksimal 300 karakter'),
+  })
+  .refine(
+    (v) =>
+      v.clockInLocal !== undefined ||
+      v.clockOutLocal !== undefined ||
+      v.taskId !== undefined ||
+      v.note !== undefined,
+    { message: 'Tidak ada perubahan' }
+  )
+
+export type TimeEntryEditInput = z.infer<typeof timeEntryEditSchema>

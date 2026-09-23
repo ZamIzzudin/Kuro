@@ -20,7 +20,7 @@ Web app clock in/out yang **terikat ke task**, dengan task bucket, dashboard akt
 | 3 | Clock in/out/switch (F2) — widget timer, riwayat jam kerja | ✅ Selesai |
 | 4 | Dashboard admin (F4) — live status, ringkasan, chart 30 hari, feed | ✅ Selesai |
 | 5 | Rekap + export XLSX/PDF + lock periode (F5) | ✅ Selesai |
-| 6 | Koreksi (F6) | ⏳ |
+| 6 | Koreksi (F6) | ✅ Selesai |
 | 7 | Hardening & release | ⏳ |
 
 ## Setup development
@@ -77,6 +77,7 @@ Akun default (ubah via env sebelum seed): `admin@notu.local` / `admin12345` — 
 - **Sidebar**: bisa di-collapse (rail 76px) dan preferensi disimpan di `localStorage`.
 - **Waktu**: semua disimpan UTC, ditampilkan WIB (`Asia/Jakarta`) — helper di `src/lib/time.ts`.
 - **Rekap & export**: rekap dihitung dari entry yang sudah clock out, dibulatkan ke bawah per menit; XLSX via ExcelJS (4 sheet), PDF via puppeteer-core. Di lokal, Chromium/Chrome/Edge dicari otomatis; di Docker sudah diarahkan ke chromium sistem (`PUPPETEER_EXECUTABLE_PATH`).
+- **Koreksi (F6)**: freelancer mengajukan usulan perubahan jam/task pada sesinya; admin approve/reject dengan catatan. Saat approve, usulan divalidasi ulang (1 sesi aktif, periode terkunci, jam keluar > masuk, tidak tumpang tindih) sebelum diterapkan dalam transaksi. Admin juga bisa **edit langsung** time entry (Q5) — wajib alasan & ter-audit. Semua perubahan tercatat di activity log (nilai lama & baru).
 - **Auth**: session cookie httpOnly (sliding 8 jam), token di DB berupa SHA-256 hash; reset password via token 1 jam sekali pakai; rate limit login & reset.
 - **RBAC**: role dicek di API (`requireApiUser`) dan server layout (`/admin`), bukan hanya UI.
 - **Audit**: semua aksi lewat `logActivity()` (`src/lib/activity.ts`) — tabel append-only.
