@@ -6,6 +6,11 @@ FROM node:20-alpine AS deps
 WORKDIR /app
 # openssl dibutuhkan Prisma untuk mendeteksi engine yang tepat.
 RUN apk add --no-cache openssl libc6-compat
+# package-lock.json di-generate dengan npm 11 (mesin dev). Image node:20 membawa
+# npm 10 yang meresolusi peer-dep opsional berbeda sehingga `npm ci` gagal
+# ("Missing: @emnapi/... from lock file"). Selaraskan versi npm di sini.
+ARG NPM_VERSION=11.6.2
+RUN npm install -g npm@${NPM_VERSION}
 COPY package.json package-lock.json ./
 RUN npm ci
 
