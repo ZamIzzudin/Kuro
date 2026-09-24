@@ -1,4 +1,4 @@
-// Notu — Prisma schema (Fase 0)
+// Kuro — Prisma schema (Fase 0)
 // Sumber: RANCANGAN_PENGEMBANGAN.md §4
 
 generator client {
@@ -42,7 +42,12 @@ enum CorrectionStatus {
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
+  // Nama lengkap (ditampilkan di mana-mana)
   name         String
+  // Username unik untuk login/identitas; opsional agar user lama tetap valid
+  username     String?  @unique
+  // Foto profil (object key di MinIO); null = pakai avatar inisial
+  avatarKey    String?
   passwordHash String
   role         Role     @default(freelancer)
   isActive     Boolean  @default(true)
@@ -59,14 +64,48 @@ model User {
   passwordResetTokens PasswordResetToken[]
   requestersCreated   Requester[]
   periodsLocked       PeriodLock[]
+  projectMemberships  ProjectMember[]
+  taskAttachments     TaskAttachment[] @relation("TaskAttachmentUploader")
 }
 
 model Project {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  // Banner: gambar (object key di MinIO) ATAU warna solid. Keduanya opsional.
+  bannerKey   String?
+  bannerColor String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  tasks       Task[]
+  members     ProjectMember[]
+  requesters  ProjectRequester[]
+}
+
+// Assign freelancer ke project — dasar dropdown project di sidebar freelancer
+model ProjectMember {
   id        String   @id @default(uuid())
-  name      String   @unique
-  isActive  Boolean  @default(true)
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  tasks     Task[]
+
+  @@unique([projectId, userId])
+  @@index([userId])
+}
+
+// Requester yang terikat pada sebuah project
+model ProjectRequester {
+  id          String    @id @default(uuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  requesterId String
+  requester   Requester @relation(fields: [requesterId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([projectId, requesterId])
+  @@index([requesterId])
 }
 
 model WorkType {
@@ -83,9 +122,10 @@ model Requester {
   isActive  Boolean  @default(true)
   // Q6: tambah requester hanya Admin
   creatorId String?
-  creator   User?    @relation(fields: [creatorId], references: [id])
-  createdAt DateTime @default(now())
+  creator   User?             @relation(fields: [creatorId], references: [id])
+  createdAt DateTime          @default(now())
   tasks     Task[]
+  projects  ProjectRequester[]
 }
 
 model Task {
@@ -111,6 +151,7 @@ model Task {
   updatedAt      DateTime   @updatedAt
 
   timeEntries TimeEntry[]
+  attachments  TaskAttachment[]
 
   @@index([status, assigneeId, deadlineAt])
   @@index([projectId])
@@ -130,12 +171,43 @@ model TimeEntry {
   createdAt            DateTime    @default(now())
 
   corrections CorrectionRequest[]
+  attachments TimeEntryAttachment[]
 
   @@index([userId, clockOutAt])
   @@index([taskId])
   @@index([clockInAt])
   // NOTE: partial unique index "satu sesi aktif per user" (business rule #2)
   // dibuat via prisma/constraints.sql (Prisma tidak mendukung partial index di schema)
+}
+
+// Lampiran task (berkas/gambar) — diunggah admin saat membuat/mengubah task
+model TaskAttachment {
+  id           String   @id @default(uuid())
+  taskId       String
+  task         Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  fileName     String
+  objectKey    String
+  contentType  String
+  size         Int
+  uploadedById String
+  uploadedBy   User     @relation("TaskAttachmentUploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([taskId])
+}
+
+// Lampiran saat clock out (berkas/gambar) — milik sebuah time entry
+model TimeEntryAttachment {
+  id          String    @id @default(uuid())
+  timeEntryId String
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  fileName    String
+  objectKey   String
+  contentType String
+  size        Int
+  createdAt   DateTime  @default(now())
+
+  @@index([timeEntryId])
 }
 
 model CorrectionRequest {

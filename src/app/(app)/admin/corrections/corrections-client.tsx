@@ -228,11 +228,11 @@ function CorrectionReviewCard({
             />
             <tr className="border-t border-line-soft">
               <td className="px-3 py-2 font-semibold text-ink-500">Durasi</td>
-              <td className="px-3 py-2 font-mono text-ink-700">{formatMinutes(c.minutes)}</td>
+              <td className="px-3 py-2 tabular-nums text-ink-700">{formatMinutes(c.minutes)}</td>
               <td className="px-2 py-2 text-center text-ink-300">
                 <ArrowRight className="mx-auto h-3.5 w-3.5" />
               </td>
-              <td className="px-3 py-2 font-mono text-ink-900">
+              <td className="px-3 py-2 tabular-nums text-ink-900">
                 {proposedDuration(item) ?? <span className="text-ink-300">—</span>}
               </td>
             </tr>

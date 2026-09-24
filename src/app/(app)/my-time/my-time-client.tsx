@@ -5,6 +5,7 @@ import Link from 'next/link'
 import useSWR from 'swr'
 import { CalendarDays, Clock, Search } from 'lucide-react'
 import { ErrorNote, Input, Spinner } from '@/components/ui'
+import { AttachmentList } from '@/components/attachment'
 import { StatusPill } from '@/components/task-bits'
 import { fetcher } from '@/lib/client'
 import { formatMinutes, formatWIB } from '@/lib/time'
@@ -132,6 +133,7 @@ export function MyTimeClient() {
                 <th className="px-5 py-3">Selesai</th>
                 <th className="px-5 py-3">Durasi</th>
                 <th className="px-5 py-3">Status Akhir</th>
+                <th className="px-5 py-3">Lampiran</th>
               </tr>
             </thead>
             <tbody>
@@ -153,7 +155,7 @@ export function MyTimeClient() {
                       formatWIB(e.clockOutAt!)
                     )}
                   </td>
-                  <td className="px-5 py-3.5 font-mono text-[13px] font-bold text-ink-900">
+                  <td className="px-5 py-3.5 text-[13px] font-bold text-ink-900 tabular-nums">
                     {e.durationLabel}
                   </td>
                   <td className="px-5 py-3.5">
@@ -161,6 +163,13 @@ export function MyTimeClient() {
                       <StatusPill status={e.taskStatusAtCheckout} />
                     ) : (
                       <span className="text-[12.5px] text-ink-400">—</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {e.attachments.length === 0 ? (
+                      <span className="text-[12.5px] text-ink-400">—</span>
+                    ) : (
+                      <AttachmentList items={e.attachments} />
                     )}
                   </td>
                 </tr>

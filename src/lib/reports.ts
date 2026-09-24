@@ -1,4 +1,4 @@
-// Notu — rekap jam kerja bulanan (Fase 5 / F5)
+// Kuro — rekap jam kerja bulanan (Fase 5 / F5)
 // Rule #4: hanya entry dengan clock_out terisi; durasi dibulatkan ke bawah (menit).
 // Rule #5: pengelompokan hari memakai tanggal WIB; sesi dihitung pada tanggal clock in.
 import { db } from './db'

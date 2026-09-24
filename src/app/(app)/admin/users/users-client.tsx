@@ -2,8 +2,8 @@
 
 import { useState, type FormEvent } from 'react'
 import useSWR from 'swr'
-import { KeyRound, Pencil, Plus } from 'lucide-react'
-import { Button, ErrorNote, FieldLabel, Input, Select, Spinner, SuccessNote } from '@/components/ui'
+import { KeyRound, Pencil, Plus, Power, PowerOff } from 'lucide-react'
+import { Button, ErrorNote, FieldLabel, IconButton, Input, Select, Spinner, SuccessNote } from '@/components/ui'
 import { Sheet } from '@/components/sheet'
 import { RoleBadge, StatusBadge } from '@/components/pills'
 import { apiSend, fetcher } from '@/lib/client'
@@ -95,36 +95,31 @@ export function UsersClient() {
                   </td>
                   <td className="px-5 py-3.5 text-[13px] text-ink-500">{formatDateWIB(u.createdAt)}</td>
                   <td className="px-5 py-3.5">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                    <div className="flex items-center justify-end gap-1">
+                      <IconButton
+                        label={`Edit ${u.name}`}
+                        icon={<Pencil className="h-4 w-4" />}
                         onClick={() => setEditFor(u)}
-                        aria-label={`Edit ${u.name}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" /> Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                      />
+                      <IconButton
+                        label={`Reset password ${u.name}`}
+                        icon={<KeyRound className="h-4 w-4" />}
                         onClick={() => setResetFor(u)}
-                        aria-label={`Reset password ${u.name}`}
-                      >
-                        <KeyRound className="h-3.5 w-3.5" /> Reset
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="sm"
+                      />
+                      <IconButton
+                        label={u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                        variant={u.isActive ? 'danger' : 'secondary'}
                         loading={busyId === u.id}
                         disabled={
                           u.isActive &&
                           u.role === 'admin' &&
                           users.filter((x) => x.role === 'admin' && x.isActive).length <= 1
                         }
+                        icon={
+                          u.isActive ? <PowerOff className="h-4 w-4" /> : <Power className="h-4 w-4" />
+                        }
                         onClick={() => toggleActive(u)}
-                      >
-                        {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                      </Button>
+                      />
                     </div>
                   </td>
                 </tr>

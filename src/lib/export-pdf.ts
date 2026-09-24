@@ -1,4 +1,4 @@
-// Notu — export PDF laporan bulanan (Fase 5 / F5)
+// Kuro — export PDF laporan bulanan (Fase 5 / F5)
 // Template HTML di-render server-side lalu dicetak ke PDF via Puppeteer (chromium sistem).
 // Dokumen hanya boleh memuat konten dari DB (bukan input mentah user) — nilai di-escape.
 import { existsSync } from 'fs'
@@ -153,14 +153,14 @@ export function buildReportHtml(report: ReportResponse): string {
 </head>
 <body>
   <div class="cover">
-    <h1>Notu — Rekap Jam Kerja</h1>
+    <h1>Kuro — Rekap Jam Kerja</h1>
     <p class="muted">Periode ${escapeHtml(label)} · ${escapeHtml(report.range.from)} s/d ${escapeHtml(report.range.to)}</p>
     <div class="meta">
       Total ${formatMinutes(report.totalMinutes)} (${report.totalMinutes} menit) · ${report.users.length} freelancer · dibuat ${escapeHtml(generated)} WIB
     </div>
   </div>
   ${report.users.map(userBlock).join('')}
-  <footer>Dokumen dibuat otomatis oleh Notu — Freelancer Time &amp; Task Tracker</footer>
+  <footer>Dokumen dibuat otomatis oleh Kuro — Keep You Inline</footer>
 </body>
 </html>`
 }

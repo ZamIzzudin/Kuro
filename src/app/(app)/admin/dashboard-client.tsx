@@ -2,7 +2,6 @@
 
 // Dashboard admin (Fase 4 / F4) — live status, ringkasan, chart 30 hari,
 // activity feed, task per status & overdue. Polling 30 detik via SWR.
-import { useState } from 'react'
 import Link from 'next/link'
 import useSWR from 'swr'
 import {
@@ -25,15 +24,25 @@ import {
   Timer,
   UserCheck,
 } from 'lucide-react'
-import type { TaskStatus } from '@prisma/client'
 import { Button, Spinner } from '@/components/ui'
-import { STATUS_META } from '@/components/task-bits'
+import { TaskStatusDonut } from '@/components/status-donut'
 import { fetcher } from '@/lib/client'
 import { useElapsedSeconds } from '@/hooks/use-elapsed'
 import { formatDateShortWIB, formatMinutes, formatTimer, formatWIB } from '@/lib/time'
 import type { ChartResponse, DashboardSummary, FeedItem, LiveSession } from '@/lib/dashboard'
+import type { TaskStatus } from '@prisma/client'
 
 const POLL = 30_000
+
+/** Urutan status pada donut "Task per Status" (termasuk dibatalkan) */
+const ALL_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done', 'cancelled']
+const EMPTY_STATUS_COUNTS: Record<TaskStatus, number> = {
+  todo: 0,
+  in_progress: 0,
+  review: 0,
+  done: 0,
+  cancelled: 0,
+}
 
 /** Warna seri per user (hex agar aman untuk recharts) */
 const SERIES_COLORS = ['#8B2FF2', '#2F6FED', '#1FB673', '#F0932B', '#D926C8', '#9291A0', '#EF4444']
@@ -72,35 +81,15 @@ export function DashboardClient() {
     refreshInterval: POLL,
   })
   const feedReq = useSWR<{ items: FeedItem[]; nextCursor: string | null }>(
-    '/api/dashboard/feed?take=15',
+    '/api/dashboard/feed?take=8',
     fetcher,
     { refreshInterval: POLL }
   )
 
-  const [extra, setExtra] = useState<FeedItem[]>([])
-  const [cursor, setCursor] = useState<string | null>(null)
-  const [loadingMore, setLoadingMore] = useState(false)
-
   const sessions = liveReq.data?.sessions ?? []
   const summary = summaryReq.data
-  const feed = [...(feedReq.data?.items ?? []), ...extra]
-  const moreCursor = cursor ?? feedReq.data?.nextCursor ?? null
-
-  async function loadMore() {
-    if (!moreCursor) return
-    setLoadingMore(true)
-    try {
-      const res = await fetcher<{ items: FeedItem[]; nextCursor: string | null }>(
-        `/api/dashboard/feed?take=15&cursor=${moreCursor}`
-      )
-      setExtra((prev) => [...prev, ...res.items])
-      setCursor(res.nextCursor)
-    } catch {
-      /* biarkan senyap; tombol bisa dicoba lagi */
-    } finally {
-      setLoadingMore(false)
-    }
-  }
+  // Batasi 8 aktivitas terbaru agar panel tidak terlalu panjang.
+  const feed = (feedReq.data?.items ?? []).slice(0, 8)
 
   function refreshAll() {
     liveReq.mutate()
@@ -160,30 +149,10 @@ export function DashboardClient() {
               {summary?.totalTasks ?? 0} total
             </span>
           </div>
-          <div className="space-y-2">
-            {(['todo', 'in_progress', 'review', 'done', 'cancelled'] as TaskStatus[]).map((s) => {
-              const count = summary?.tasksByStatus[s] ?? 0
-              const total = summary?.totalTasks ?? 0
-              const pct = total > 0 ? Math.round((count / total) * 100) : 0
-              return (
-                <div key={s}>
-                  <div className="flex items-center justify-between text-[12px] font-semibold text-ink-500">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_META[s].dot}`} />
-                      {STATUS_META[s].label}
-                    </span>
-                    <span className="font-extrabold text-ink-700">{count}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 w-full rounded-full bg-line-soft">
-                    <div
-                      className={`h-1.5 rounded-full ${STATUS_META[s].dot}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <TaskStatusDonut
+            counts={summary?.tasksByStatus ?? EMPTY_STATUS_COUNTS}
+            statuses={ALL_STATUSES}
+          />
         </div>
       </div>
 
@@ -284,13 +253,6 @@ export function DashboardClient() {
                   )
                 })}
               </ol>
-              {moreCursor && (
-                <div className="mt-4 border-t border-line-soft pt-3.5 text-center">
-                  <Button variant="ghost" size="sm" onClick={loadMore} loading={loadingMore}>
-                    Muat lebih banyak
-                  </Button>
-                </div>
-              )}
             </>
           )}
         </section>
@@ -378,7 +340,7 @@ function LiveCard({ session }: { session: LiveSession }) {
             <Timer className="h-3 w-3" /> mulai {formatWIB(session.clockInAt, 'HH.mm')}
           </p>
         </div>
-        <span className="ml-auto font-mono text-[15px] font-extrabold text-brand-1 tabular-nums">
+        <span className="ml-auto text-[15px] font-extrabold text-brand-1 tabular-nums">
           {formatTimer(seconds)}
         </span>
       </div>

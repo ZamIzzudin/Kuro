@@ -43,7 +43,7 @@ export function ActiveSessionIndicator({ compact = false }: { compact?: boolean 
         <span className="text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
           Sesi berjalan
         </span>
-        <span className="ml-auto font-mono text-[12px] font-extrabold text-brand-1 tabular-nums">
+        <span className="ml-auto text-[12px] font-extrabold text-brand-1 tabular-nums">
           {formatTimer(seconds)}
         </span>
       </div>

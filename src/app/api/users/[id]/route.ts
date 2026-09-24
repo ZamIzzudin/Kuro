@@ -50,7 +50,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   const updated = await db.user.update({
     where: { id: params.id },
     data: { name, role, isActive },
-    select: { id: true, name: true, email: true, role: true, isActive: true, createdAt: true },
+    select: { id: true, name: true, username: true, email: true, role: true, isActive: true, createdAt: true },
   })
 
   // Nonaktifkan user → revoke semua sesinya

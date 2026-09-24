@@ -2,7 +2,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Notu design tokens (dari design-guideline.html — "Taskloop" v1.0) ===== */
+/* ===== Kuro design tokens (dari design-guideline.html — "Taskloop" v1.0) ===== */
 :root {
   --bg: #f4f4f7;
   --surface: #ffffff;
@@ -74,11 +74,6 @@
 }
 
 @layer components {
-  /* Gradient brand — HANYA untuk brand mark & dekorasi.
-     JANGAN dipakai untuk button: button selalu warna solid dari palette (keputusan user). */
-  .bg-brand-grad {
-    background-image: linear-gradient(135deg, var(--brand-1), var(--brand-2));
-  }
   .text-brand-1 {
     color: var(--brand-1);
   }

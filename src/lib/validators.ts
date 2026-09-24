@@ -1,4 +1,4 @@
-// Notu — skema validasi Zod (Fase 0: auth)
+// Kuro — skema validasi Zod (Fase 0: auth)
 import { z } from 'zod'
 
 export const loginSchema = z.object({
@@ -38,6 +38,37 @@ export const adminResetPasswordSchema = z.object({
   password: z.string().min(8, 'Password minimal 8 karakter'),
 })
 
+// ===== Profil sendiri (semua role): username, nama lengkap, foto, password =====
+
+const USERNAME_RE = /^[a-z0-9._-]{3,30}$/
+
+/** Username unik: huruf kecil, angka, titik, underscore, strip (3–30) */
+export const profileUpdateSchema = z
+  .object({
+    username: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .regex(USERNAME_RE, 'Username 3–30 karakter, hanya huruf kecil, angka, titik, _ atau -')
+      .nullable()
+      .optional(),
+    name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100, 'Nama maksimal 100 karakter').optional(),
+    /** Object key foto profil baru (hasil unggah). `null` = hapus foto. */
+    avatarKey: z.string().max(300).nullable().optional(),
+  })
+  .refine(
+    (v) => v.username !== undefined || v.name !== undefined || v.avatarKey !== undefined,
+    { message: 'Tidak ada perubahan' }
+  )
+
+export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>
+
+/** Ganti password sendiri — wajib password lama */
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Password lama wajib diisi'),
+  newPassword: z.string().min(8, 'Password baru minimal 8 karakter'),
+})
+
 export const masterCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100, 'Maksimal 100 karakter'),
 })
@@ -50,6 +81,61 @@ export const masterUpdateSchema = z
   .refine((v) => v.name !== undefined || v.isActive !== undefined, {
     message: 'Tidak ada perubahan',
   })
+
+// ===== Enhancement: Project lengkap (banner, requester, member) =====
+
+/** Warna HEX 6 digit, mis. #8B2FF2 — dipakai untuk banner warna project */
+const hexColorField = z
+  .string()
+  .trim()
+  .regex(/^#[0-9a-fA-F]{6}$/, 'Warna harus format HEX, mis. #8B2FF2')
+
+const projectFields = {
+  name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100, 'Maksimal 100 karakter'),
+  description: z
+    .string()
+    .trim()
+    .max(1000, 'Deskripsi maksimal 1000 karakter')
+    .optional()
+    .nullable(),
+  bannerColor: hexColorField.optional().nullable(),
+  requesterIds: z.array(z.string().min(1)).max(50, 'Terlalu banyak requester').optional(),
+  memberIds: z.array(z.string().min(1)).max(200, 'Terlalu banyak member').optional(),
+}
+
+export const projectCreateSchema = z.object({
+  name: projectFields.name,
+  description: projectFields.description,
+  bannerColor: projectFields.bannerColor,
+  bannerKey: z.string().max(300).optional().nullable(),
+  requesterIds: projectFields.requesterIds,
+  memberIds: projectFields.memberIds,
+})
+
+export const projectUpdateSchema = z
+  .object({
+    name: projectFields.name.optional(),
+    description: projectFields.description,
+    bannerColor: projectFields.bannerColor,
+    bannerKey: z.string().max(300).optional().nullable(),
+    isActive: z.boolean().optional(),
+    requesterIds: projectFields.requesterIds,
+    memberIds: projectFields.memberIds,
+  })
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.description !== undefined ||
+      v.bannerColor !== undefined ||
+      v.bannerKey !== undefined ||
+      v.isActive !== undefined ||
+      v.requesterIds !== undefined ||
+      v.memberIds !== undefined,
+    { message: 'Tidak ada perubahan' }
+  )
+
+export type ProjectCreateInput = z.infer<typeof projectCreateSchema>
+export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>
 
 // ===== Fase 2: Task =====
 
@@ -66,6 +152,16 @@ const dateTimeField = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, 'Format tanggal & jam tidak valid')
 
+/** Lampiran yang sudah diunggah ke storage (metadata saja). Jumlah tidak dibatasi. */
+export const attachmentInputSchema = z.object({
+  objectKey: z.string().min(1, 'Lampiran tidak valid'),
+  fileName: z.string().trim().min(1).max(200, 'Nama berkas maksimal 200 karakter'),
+  contentType: z.string().trim().min(1).max(150),
+  size: z.number().int().nonnegative(),
+})
+
+export type AttachmentInputPayload = z.infer<typeof attachmentInputSchema>
+
 export const taskCreateSchema = z.object({
   title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120, 'Judul maksimal 120 karakter'),
   description: z.string().trim().max(2000, 'Deskripsi maksimal 2000 karakter').optional().nullable(),
@@ -77,6 +173,7 @@ export const taskCreateSchema = z.object({
   estimatedHours: estimatedHoursField.optional().nullable(),
   requestDateLocal: dateOnlyField,
   deadlineLocal: dateTimeField,
+  attachments: z.array(attachmentInputSchema).max(50).optional(),
 })
 
 export const taskUpdateSchema = z.object({
@@ -91,6 +188,10 @@ export const taskUpdateSchema = z.object({
   requestDateLocal: dateOnlyField.optional(),
   deadlineLocal: dateTimeField.optional(),
   status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
+  // Lampiran BARU yang ditambahkan (bukan pengganti).
+  addAttachments: z.array(attachmentInputSchema).max(50).optional(),
+  // Id lampiran task yang dihapus.
+  removeAttachmentIds: z.array(z.string().min(1)).max(100).optional(),
 })
 
 export const taskStatusSchema = z.object({
@@ -118,6 +219,8 @@ export const clockOutSchema = z.object({
   taskStatus: z.enum(CHECKOUT_STATUS_OPTIONS, {
     errorMap: () => ({ message: 'Status task tidak valid' }),
   }),
+  // Lampiran opsional saat clock out — jumlah tidak dibatasi.
+  attachments: z.array(attachmentInputSchema).max(50).optional(),
 })
 
 // ===== Fase 5: Rekap & Export / Period Lock (F5) =====

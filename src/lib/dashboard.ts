@@ -1,4 +1,4 @@
-// Notu — helper dashboard admin (Fase 4 / F4)
+// Kuro — helper dashboard admin (Fase 4 / F4)
 // Semua perhitungan waktu memakai batas hari/bulan WIB (rule #5: simpan UTC, tampil WIB).
 import type { TaskStatus } from '@prisma/client'
 import { formatInTimeZone } from 'date-fns-tz'

@@ -1,22 +1,23 @@
 // /api/projects/overview — daftar project + statistik task (untuk UI per-project)
-// Admin: semua project. Freelancer: hanya project yang punya task miliknya/bucket bersama (rule #12).
+// Admin: semua project. Freelancer: project tempat dia member atau punya task (rule #12).
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import type { ProjectOverview } from '@/lib/tasks'
+import { freelancerProjectScope, freelancerTaskScope, type ProjectOverview } from '@/lib/tasks'
+import { bannerUrlFor } from '@/lib/projects'
 
 export async function GET() {
   const { user, error } = await requireApiUser()
   if (error) return error
 
-  // Scope task sesuai role
-  const taskScope =
-    user.role === 'freelancer'
-      ? { OR: [{ assigneeId: user.id }, { assigneeId: null }] }
-      : {}
+  const isFreelancer = user.role === 'freelancer'
+  const taskScope = isFreelancer ? freelancerTaskScope(user.id) : {}
+  const projectWhere = isFreelancer
+    ? { isActive: true, ...freelancerProjectScope(user.id) }
+    : undefined
 
   const projects = await db.project.findMany({
-    where: user.role === 'freelancer' ? { isActive: true, tasks: { some: taskScope } } : undefined,
+    where: projectWhere,
     orderBy: { name: 'asc' },
     include: {
       tasks: {
@@ -44,19 +45,17 @@ export async function GET() {
       if (t.assigneeId === null) unassigned += 1
     }
 
-    const countable = p.tasks.length - counts.cancelled
-    const progressPct = countable > 0 ? Math.round((counts.done / countable) * 100) : 0
-
     return {
       id: p.id,
       name: p.name,
+      bannerColor: p.bannerColor,
+      bannerUrl: bannerUrlFor({ id: p.id, bannerKey: p.bannerKey }),
       isActive: p.isActive,
       total: p.tasks.length,
       active,
       overdue,
       mine,
       unassigned,
-      progressPct,
       counts,
     }
   })

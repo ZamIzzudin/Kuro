@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     const link = `${appUrl}/reset-password?token=${token}`
     await sendMail({
       to: user.email,
-      subject: 'Reset password — Notu',
+      subject: 'Reset password — Kuro',
       html: resetPasswordEmail(user.name, link),
     })
     await logActivity({

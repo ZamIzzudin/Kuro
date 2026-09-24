@@ -10,6 +10,7 @@ import { userCreateSchema } from '@/lib/validators'
 const PUBLIC_FIELDS = {
   id: true,
   name: true,
+  username: true,
   email: true,
   role: true,
   isActive: true,

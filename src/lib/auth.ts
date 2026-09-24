@@ -1,11 +1,11 @@
-// Notu — session management (Fase 0)
+// Kuro — session management (Fase 0)
 // Session cookie httpOnly + tabel Session, sliding expiry 8 jam (RANCANGAN §8)
 import crypto from 'crypto'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { db } from './db'
 
-export const SESSION_COOKIE = 'notu_session'
+export const SESSION_COOKIE = 'kuro_session'
 export const SESSION_HOURS = 8
 
 export function hashToken(token: string): string {
@@ -16,16 +16,33 @@ export type SessionUser = {
   id: string
   email: string
   name: string
+  username: string | null
   role: 'admin' | 'freelancer'
+  avatarUrl: string | null
+}
+
+/** URL proxy foto profil (dengan cache-busting dari object key). */
+export function avatarUrlFor(u: { id: string; avatarKey: string | null }): string | null {
+  if (!u.avatarKey) return null
+  return `/api/users/${u.id}/avatar?v=${encodeURIComponent(u.avatarKey)}`
 }
 
 export function publicUser(u: {
   id: string
   email: string
   name: string
+  username?: string | null
   role: 'admin' | 'freelancer'
+  avatarKey?: string | null
 }): SessionUser {
-  return { id: u.id, email: u.email, name: u.name, role: u.role }
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    username: u.username ?? null,
+    role: u.role,
+    avatarUrl: u.avatarKey ? avatarUrlFor({ id: u.id, avatarKey: u.avatarKey }) : null,
+  }
 }
 
 /** Buat sesi baru; kembalikan token mentah (disimpan di cookie) */

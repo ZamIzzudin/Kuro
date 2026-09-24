@@ -1,12 +1,29 @@
-// /api/tasks/:id — PATCH (admin): edit lengkap, assign/re-assign, set status (incl. Cancelled)
+// /api/tasks/:id — GET (detail task, semua login) & PATCH (admin: edit lengkap, assign/re-assign, set status incl. Cancelled)
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
-import { findTask, mapTask, TASK_INCLUDE } from '@/lib/tasks'
+import { createTaskAttachments } from '@/lib/attachments'
+import { findTask, mapTask, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
+import { removeObject } from '@/lib/storage'
 import { dateOnlyUTC, wibLocalToDate } from '@/lib/time'
 import { taskUpdateSchema } from '@/lib/validators'
+
+export async function GET(_req: Request, { params }: { params: { id: string } }) {
+  const { user, error } = await requireApiUser()
+  if (error) return error
+
+  // Rule #12: freelancer hanya boleh membuka detail task dalam scope-nya.
+  const where =
+    user.role === 'freelancer'
+      ? { AND: [{ id: params.id }, freelancerTaskScope(user.id)] }
+      : { id: params.id }
+
+  const task = await db.task.findFirst({ where, include: TASK_INCLUDE })
+  if (!task) return NextResponse.json({ error: 'Task tidak ditemukan.' }, { status: 404 })
+  return NextResponse.json({ task: mapTask(task) })
+}
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
   const { user: admin, error } = await requireApiUser(['admin'])
@@ -56,7 +73,31 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.deadlineLocal !== undefined) data.deadlineAt = wibLocalToDate(body.deadlineLocal)
   if (body.status !== undefined) data.status = body.status
 
-  const updated = await db.task.update({ where: { id: params.id }, data, include: TASK_INCLUDE })
+  const addAttachments = body.addAttachments ?? []
+  const removeAttachmentIds = body.removeAttachmentIds ?? []
+
+  // Validasi lampiran yang akan dihapus memang milik task ini (cegah hapus silang).
+  let attachmentsToRemove: { id: string; objectKey: string; fileName: string }[] = []
+  if (removeAttachmentIds.length) {
+    attachmentsToRemove = await db.taskAttachment.findMany({
+      where: { id: { in: removeAttachmentIds }, taskId: params.id },
+      select: { id: true, objectKey: true, fileName: true },
+    })
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    await tx.task.update({ where: { id: params.id }, data })
+    if (attachmentsToRemove.length) {
+      await tx.taskAttachment.deleteMany({ where: { id: { in: attachmentsToRemove.map((a) => a.id) } } })
+    }
+    if (addAttachments.length) {
+      await createTaskAttachments(tx, params.id, admin.id, addAttachments)
+    }
+    return tx.task.findUniqueOrThrow({ where: { id: params.id }, include: TASK_INCLUDE })
+  }, TX_OPTIONS)
+
+  // Hapus objek lama di storage setelah transaksi sukses (best-effort).
+  await Promise.all(attachmentsToRemove.map((a) => removeObject(a.objectKey)))
 
   const assigneeChanged = body.assigneeId !== undefined && (body.assigneeId || null) !== before.assigneeId
 
@@ -89,6 +130,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     },
     description: `${admin.name} mengubah task "${before.title}"`,
   })
+  if (addAttachments.length || attachmentsToRemove.length) {
+    await logActivity({
+      userId: admin.id,
+      action: 'task_updated',
+      entityType: 'task',
+      entityId: updated.id,
+      newValue: {
+        attachmentsAdded: addAttachments.map((a) => a.fileName),
+        attachmentsRemoved: attachmentsToRemove.map((a) => a.fileName),
+      },
+      description: `${admin.name} memperbarui lampiran task "${before.title}"`,
+    })
+  }
   if (assigneeChanged && updated.assigneeId) {
     await logActivity({
       userId: admin.id,

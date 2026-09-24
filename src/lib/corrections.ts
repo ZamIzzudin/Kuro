@@ -1,4 +1,4 @@
-// Notu — helper koreksi time entry (Fase 6 / F6)
+// Kuro — helper koreksi time entry (Fase 6 / F6)
 // Aturan terkait: rule #2 (1 sesi aktif), #11 (periode terkunci), #12 (scope freelancer).
 import type { CorrectionStatus, Prisma } from '@prisma/client'
 import { db } from './db'

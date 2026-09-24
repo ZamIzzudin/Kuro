@@ -1,4 +1,4 @@
-// Notu — activity log service (business rule #6):
+// Kuro — activity log service (business rule #6):
 // SEMUA aksi (clock in/out, switch task, perubahan status, koreksi, lock, dsb.)
 // wajib melewati fungsi ini. Tabel append-only (tidak ada UPDATE/DELETE).
 import type { Prisma } from '@prisma/client'
@@ -24,9 +24,13 @@ export type ActivityAction =
   | 'correction_rejected'
   | 'period_locked'
   | 'period_unlocked'
+  | 'project_created'
+  | 'project_updated'
   | 'master_created'
   | 'master_updated'
   | 'user_password_reset_by_admin'
+  | 'profile_updated'
+  | 'password_changed'
 
 type LogInput = {
   userId?: string | null

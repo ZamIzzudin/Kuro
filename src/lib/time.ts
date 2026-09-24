@@ -1,4 +1,4 @@
-// Notu — helper waktu (business rule #5: simpan UTC, tampil WIB)
+// Kuro — helper waktu (business rule #5: simpan UTC, tampil WIB)
 import { id as idLocale } from 'date-fns/locale'
 import { formatInTimeZone, fromZonedTime } from 'date-fns-tz'
 

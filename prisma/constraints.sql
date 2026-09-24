@@ -1,4 +1,4 @@
--- Notu — constraint tambahan yang tidak didukung deklaratif Prisma.
+-- Kuro — constraint tambahan yang tidak didukung deklaratif Prisma.
 -- Dijalankan setelah `prisma db push` (script: npm run db:constraints).
 
 -- Business rule #2: satu freelancer hanya boleh punya SATU sesi aktif.

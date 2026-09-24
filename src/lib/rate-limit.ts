@@ -1,5 +1,18 @@
-// Notu — rate limiter in-memory sederhana (single instance, cukup untuk v1)
+// Kuro — rate limiter in-memory sederhana (single instance, cukup untuk v1)
+// Catatan: pada deployment multi-instance, ganti backend dengan Redis.
 const buckets = new Map<string, { count: number; resetAt: number }>()
+
+/** Bersihkan bucket kedaluwarsa agar Map tidak tumbuh tanpa batas (dijalankan tiap 5 menit) */
+const SWEEP_MS = 5 * 60_000
+let lastSweep = Date.now()
+
+function sweepExpired(now: number) {
+  if (now - lastSweep < SWEEP_MS) return
+  lastSweep = now
+  for (const [key, bucket] of Array.from(buckets)) {
+    if (bucket.resetAt < now) buckets.delete(key)
+  }
+}
 
 export function rateLimit(
   key: string,
@@ -7,6 +20,7 @@ export function rateLimit(
   windowMs: number
 ): { ok: boolean; retryAfter: number } {
   const now = Date.now()
+  sweepExpired(now)
   const bucket = buckets.get(key)
   if (!bucket || bucket.resetAt < now) {
     buckets.set(key, { count: 1, resetAt: now + windowMs })

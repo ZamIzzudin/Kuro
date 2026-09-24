@@ -1,6 +1,12 @@
-# Notu — database development lokal
+# Kuro — database development lokal (nama container/DB historis tetap "notu")
 # Pakai: docker compose -f docker-compose.dev.yml up -d
 # (tidak dipakai untuk produksi; produksi memakai service Postgres di Dokploy)
+#
+# MinIO lokal (opsional, untuk menguji unggah banner project):
+#   docker compose -f docker-compose.dev.yml --profile storage up -d
+# Lalu isi di .env:
+#   MINIO_ENDPOINT=localhost  MINIO_PORT=9000  MINIO_USE_SSL=false
+#   MINIO_ACCESS_KEY=notu     MINIO_SECRET_KEY=notu-secret  MINIO_BUCKET=notu
 services:
   db:
     image: postgres:16-alpine
@@ -15,5 +21,21 @@ services:
     volumes:
       - notu-db-data:/var/lib/postgresql/data
 
+  minio:
+    image: minio/minio:latest
+    container_name: notu-minio
+    profiles: ['storage']
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: notu
+      MINIO_ROOT_PASSWORD: notu-secret
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - notu-minio-data:/data
+
 volumes:
   notu-db-data:
+  notu-minio-data:

@@ -7,6 +7,8 @@ import { ArrowRightLeft, CalendarDays, LogOut, Play, Search } from 'lucide-react
 import { Button, ErrorNote, FieldLabel, Input, Select, Spinner, Textarea } from '@/components/ui'
 import { Sheet } from '@/components/sheet'
 import { OverdueBadge, PriorityBadge, STATUS_META } from '@/components/task-bits'
+import { AttachmentPicker, toAttachmentPayload, type PendingAttachment } from '@/components/attachment'
+import { useProjectScope } from '@/components/project-scope'
 import { apiSend, fetcher } from '@/lib/client'
 import { useElapsedSeconds } from '@/hooks/use-elapsed'
 import { formatDateShortWIB, formatTimer, formatWIB } from '@/lib/time'
@@ -19,7 +21,11 @@ export function HomeClient() {
   const activeReq = useSWR<{ entry: TimeEntryItem | null }>('/api/time-entries/active', fetcher, {
     refreshInterval: 30_000,
   })
-  const tasksReq = useSWR<{ tasks: TaskItem[] }>('/api/tasks/available', fetcher)
+  const { projectId } = useProjectScope()
+  const tasksReq = useSWR<{ tasks: TaskItem[] }>(
+    projectId ? `/api/tasks/available?projectId=${projectId}` : '/api/tasks/available',
+    fetcher
+  )
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
@@ -166,7 +172,7 @@ function RunningCard({
       </div>
 
       <div className="px-5 py-7 text-center">
-        <p className="font-mono text-[42px] font-extrabold leading-none tracking-tight text-ink-900 tabular-nums">
+        <p className="text-[42px] font-extrabold leading-none tracking-tight text-ink-900 tabular-nums">
           {formatTimer(seconds)}
         </p>
 
@@ -396,16 +402,23 @@ function ClockOutSheet({
   const seconds = useElapsedSeconds(entry.clockInAt)
   const [note, setNote] = useState('')
   const [taskStatus, setTaskStatus] = useState<string>('in_progress')
+  const [files, setFiles] = useState<PendingAttachment[]>([])
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Task Done/Dibatalkan terkunci — hanya admin yang boleh mengubah statusnya.
+  const locked = entry.task.status === 'done' || entry.task.status === 'cancelled'
   const remaining = 10 - note.trim().length
 
   async function submit() {
     setSaving(true)
     setError(null)
     try {
-      await apiSend('/api/time-entries/clock-out', 'POST', { note: note.trim(), taskStatus })
+      await apiSend('/api/time-entries/clock-out', 'POST', {
+        note: note.trim(),
+        taskStatus,
+        attachments: toAttachmentPayload(files),
+      })
       await onDone()
       onClose()
     } catch (e) {
@@ -422,7 +435,7 @@ function ClockOutSheet({
       <div className="space-y-4">
         <div className="rounded-lg bg-surface-2 px-4 py-3.5">
           <p className="text-[12px] font-bold uppercase tracking-wide text-ink-500">Durasi sesi ini</p>
-          <p className="mt-1 font-mono text-[24px] font-extrabold text-ink-900 tabular-nums">
+          <p className="mt-1 text-[24px] font-extrabold text-ink-900 tabular-nums">
             {formatTimer(seconds)}
           </p>
         </div>
@@ -444,13 +457,33 @@ function ClockOutSheet({
 
         <div>
           <FieldLabel htmlFor="co-status">Status task setelah sesi ini</FieldLabel>
-          <Select id="co-status" value={taskStatus} onChange={(e) => setTaskStatus(e.target.value)}>
-            {CHECKOUT_STATUS.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_META[s].label}
-              </option>
-            ))}
+          <Select
+            id="co-status"
+            value={locked ? entry.task.status : taskStatus}
+            disabled={locked}
+            onChange={(e) => setTaskStatus(e.target.value)}
+          >
+            {locked ? (
+              <option value={entry.task.status}>{STATUS_META[entry.task.status].label}</option>
+            ) : (
+              CHECKOUT_STATUS.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_META[s].label}
+                </option>
+              ))
+            )}
           </Select>
+          {locked && (
+            <p className="mt-1.5 text-[12px] font-semibold text-ink-400">
+              Task sudah {entry.task.status === 'done' ? 'selesai' : 'dibatalkan'} — status hanya bisa
+              diubah oleh admin. Clock out tetap menutup sesi ini.
+            </p>
+          )}
+        </div>
+
+        <div>
+          <FieldLabel>Lampiran (opsional)</FieldLabel>
+          <AttachmentPicker files={files} onChange={setFiles} disabled={saving} />
         </div>
 
         {error && <ErrorNote>{error}</ErrorNote>}

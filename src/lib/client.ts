@@ -24,3 +24,15 @@ export async function apiSend<T = unknown>(
   }
   return data as T
 }
+
+/** Unggah satu berkas lampiran (multipart) → metadata untuk disimpan ke task/time entry. */
+export async function uploadAttachment(
+  file: File
+): Promise<{ objectKey: string; fileName: string; contentType: string; size: number }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/uploads/attachment', { method: 'POST', body: form })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Gagal mengunggah berkas')
+  return data as { objectKey: string; fileName: string; contentType: string; size: number }
+}

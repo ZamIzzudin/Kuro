@@ -1,9 +1,9 @@
-// Notu — middleware: proteksi halaman (redirect login) + sliding cookie 8 jam.
+// Kuro — middleware: proteksi halaman (redirect login) + sliding cookie 8 jam.
 // Catatan: pengecekan ROLE dilakukan di server layout & API (perlu akses DB),
 // middleware hanya memeriksa keberadaan cookie sesi (coarse check).
 import { NextRequest, NextResponse } from 'next/server'
 
-const SESSION_COOKIE = 'notu_session'
+const SESSION_COOKIE = 'kuro_session'
 const SESSION_MAX_AGE = 8 * 3600
 const PUBLIC_PAGES = ['/login', '/forgot-password', '/reset-password']
 

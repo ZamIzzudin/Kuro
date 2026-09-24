@@ -1,11 +1,40 @@
 node_modules
 .next
+.next-e2e
+.next-build-check
+.prisma-gen
+out
+build
+
+# VCS & dokumentasi
 .git
 .gitignore
+.gitattributes
+*.md
+
+# Environment (JANGAN pernah ikut ke image)
 .env
 .env.*
 !.env.example
-npm-debug.log*
+
+# Artefak dev/test yang tidak dipakai runtime
+e2e
+tests
+scripts
+playwright.config.ts
+test-results
+playwright-report
+coverage
+pw-run.log
+tsconfig.tsbuildinfo
+
+# Konfigurasi Docker itu sendiri (tidak perlu di dalam image)
 Dockerfile
+.dockerignore
 docker-compose*.yml
-README.md
+
+# Sampah OS/editor
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*

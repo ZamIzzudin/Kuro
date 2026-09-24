@@ -59,7 +59,7 @@ export function TaskProgress({
   if (estimatedHours === null) {
     return (
       <div className="flex items-center justify-between text-[11.5px] font-semibold text-ink-500">
-        <span className="font-mono text-ink-700">{formatMinutes(loggedMinutes)}</span>
+        <span className="tabular-nums text-ink-700">{formatMinutes(loggedMinutes)}</span>
         <span className="text-ink-400">Tanpa estimasi</span>
       </div>
     )
@@ -70,7 +70,7 @@ export function TaskProgress({
   return (
     <div>
       <div className="flex items-center justify-between text-[11.5px] font-semibold text-ink-500">
-        <span className="font-mono text-ink-700">
+        <span className="tabular-nums text-ink-700">
           {formatMinutes(loggedMinutes)} / {estimatedHours}j
         </span>
         <span className={complete ? 'font-extrabold text-status-completed' : ''}>{pct}%</span>

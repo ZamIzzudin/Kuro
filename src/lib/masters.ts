@@ -1,5 +1,5 @@
-// Handler generik untuk master data (Project / Jenis Pekerjaan / Requester) — admin only.
-// Dipakai oleh /api/projects, /api/work-types, /api/requesters.
+// Handler generik untuk master data (Jenis Pekerjaan / Requester) — admin only.
+// Dipakai oleh /api/work-types & /api/requesters. (Project punya route sendiri.)
 import { NextResponse } from 'next/server'
 import { db } from './db'
 import { logActivity } from './activity'
@@ -7,10 +7,9 @@ import { parseJson, prismaError } from './api-helpers'
 import { requireApiUser } from './auth'
 import { masterCreateSchema, masterUpdateSchema } from './validators'
 
-type MasterKey = 'project' | 'workType' | 'requester'
+type MasterKey = 'workType' | 'requester'
 
 const LABEL: Record<MasterKey, string> = {
-  project: 'Project',
   workType: 'Jenis Pekerjaan',
   requester: 'Requester',
 }
@@ -36,7 +35,6 @@ interface MasterDelegate {
 function table(key: MasterKey): MasterDelegate {
   // Prisma delegate sesuai model
   return {
-    project: db.project,
     workType: db.workType,
     requester: db.requester,
   }[key] as unknown as MasterDelegate

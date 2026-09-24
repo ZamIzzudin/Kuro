@@ -8,6 +8,12 @@
 
 # testing
 /coverage
+/test-results/
+/playwright-report/
+/.next-e2e/
+/.next-build-check/
+/.prisma-gen/
+pw-run.log
 
 # next.js
 /.next/

@@ -1,7 +1,7 @@
-// Notu — helper bersama untuk memulai sesi kerja (clock in & switch task)
+// Kuro — helper bersama untuk memulai sesi kerja (clock in & switch task)
 import type { TaskStatus } from '@prisma/client'
 import { NextResponse } from 'next/server'
-import { db } from './db'
+import { db, TX_OPTIONS } from './db'
 import {
   PERIOD_LOCK_MESSAGE,
   TIME_ENTRY_INCLUDE,
@@ -108,7 +108,7 @@ export async function startSession(opts: {
         data: { userId: opts.userId, taskId: task.id, clockInAt: now },
         include: TIME_ENTRY_INCLUDE,
       })
-    })
+    }, TX_OPTIONS)
 
     return {
       ok: true,

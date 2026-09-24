@@ -1,0 +1,16 @@
+# Normalisasi line ending agar container Linux tidak rusak oleh CRLF.
+* text=auto eol=lf
+
+# Shell script & Dockerfile wajib LF.
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.sql text eol=lf
+
+# Berkas biner
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ico binary

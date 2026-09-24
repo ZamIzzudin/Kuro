@@ -30,7 +30,6 @@ const config: Config = {
       fontFamily: {
         sans: ['var(--font-body)', 'sans-serif'],
         heading: ['var(--font-heading)', 'sans-serif'],
-        mono: ['var(--font-jono)', 'monospace'],
       },
     },
   },

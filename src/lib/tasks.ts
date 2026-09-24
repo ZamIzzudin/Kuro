@@ -1,6 +1,7 @@
-// Notu — helper task: include Prisma, mapping ke bentuk JSON (TaskItem), sorting
+// Kuro — helper task: include Prisma, mapping ke bentuk JSON (TaskItem), sorting
 import type { Prisma, Priority, TaskStatus } from '@prisma/client'
 import { db } from './db'
+import { mapAttachment, type AttachmentItem } from './attachments'
 
 export const TASK_INCLUDE = {
   project: true,
@@ -8,6 +9,7 @@ export const TASK_INCLUDE = {
   requester: true,
   assignee: { select: { id: true, name: true } },
   timeEntries: { select: { clockInAt: true, clockOutAt: true } },
+  attachments: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.TaskInclude
 
 type TaskWithRelations = Prisma.TaskGetPayload<{ include: typeof TASK_INCLUDE }>
@@ -36,6 +38,8 @@ export type TaskItem = {
   assignee: { id: string; name: string } | null
   /** Total menit dari semua time entry selesai (clock_out terisi) */
   loggedMinutes: number
+  /** Lampiran task (berkas/gambar) */
+  attachments: AttachmentItem[]
   /** deadline lewat & belum done/cancelled (rule #10, runtime) */
   overdue: boolean
 }
@@ -66,6 +70,7 @@ export function mapTask(t: TaskWithRelations): TaskItem {
     requester: { name: t.requester.name },
     assignee: t.assignee ? { id: t.assignee.id, name: t.assignee.name } : null,
     loggedMinutes,
+    attachments: t.attachments.map(mapAttachment),
     overdue: t.deadlineAt < new Date() && t.status !== 'done' && t.status !== 'cancelled',
   }
 }
@@ -87,10 +92,35 @@ export function findTask(id: string) {
   return db.task.findUnique({ where: { id }, include: TASK_INCLUDE })
 }
 
+/**
+ * Scope task untuk freelancer (rule #12 + enhancement project):
+ * - task yang di-assign ke dia (di project mana pun), ATAU
+ * - task bucket bersama (assignee null) di project tempat dia menjadi member.
+ */
+export function freelancerTaskScope(userId: string): Prisma.TaskWhereInput {
+  return {
+    OR: [
+      { assigneeId: userId },
+      { assigneeId: null, project: { members: { some: { userId } } } },
+    ],
+  }
+}
+
+/** Scope project yang relevan untuk freelancer: dia member, atau punya task di sana. */
+export function freelancerProjectScope(userId: string): Prisma.ProjectWhereInput {
+  return {
+    OR: [{ members: { some: { userId } } }, { tasks: { some: { assigneeId: userId } } }],
+  }
+}
+
 /** Statistik task per project (untuk halaman pemilihan project) */
 export type ProjectOverview = {
   id: string
   name: string
+  /** Warna HEX banner (fallback tanpa gambar) */
+  bannerColor: string | null
+  /** URL proxy gambar banner — null bila tidak ada */
+  bannerUrl: string | null
   isActive: boolean
   /** jumlah task yang terlihat oleh user */
   total: number
@@ -101,6 +131,5 @@ export type ProjectOverview = {
   mine: number
   /** task bucket bersama (belum di-assign) */
   unassigned: number
-  progressPct: number
   counts: { todo: number; in_progress: number; review: number; done: number; cancelled: number }
 }

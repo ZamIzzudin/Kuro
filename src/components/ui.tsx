@@ -1,4 +1,4 @@
-// Komponen UI dasar Notu — mengikuti design guideline (button pill, input radius 12)
+// Komponen UI dasar Kuro — mengikuti design guideline (button pill, input radius 12)
 'use client'
 
 import { forwardRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
@@ -119,3 +119,69 @@ export function SuccessNote({ children }: { children: React.ReactNode }) {
     </p>
   )
 }
+
+/** Tooltip CSS murni — muncul saat hover/focus, tanpa dependensi. */
+export function Tooltip({
+  label,
+  children,
+  side = 'top',
+  wrap = false,
+  className,
+}: {
+  label: string
+  children: React.ReactNode
+  side?: 'top' | 'bottom'
+  /** Izinkan teks panjang turun baris (mis. judul task) alih-alih memanjang. */
+  wrap?: boolean
+  className?: string
+}) {
+  return (
+    <span className={cn('group/tt relative inline-flex', className)}>
+      {children}
+      <span
+        role="tooltip"
+        className={cn(
+          'pointer-events-none absolute left-1/2 z-50 -translate-x-1/2 rounded-md bg-ink-900 px-2 py-1 text-[11.5px] font-semibold text-white opacity-0 shadow-md transition-opacity duration-150 group-hover/tt:opacity-100 group-focus-within/tt:opacity-100',
+          wrap ? 'w-max max-w-[280px] text-left leading-snug' : 'whitespace-nowrap',
+          side === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+        )}
+      >
+        {label}
+      </span>
+    </span>
+  )
+}
+
+type IconButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  label: string
+  icon: React.ReactNode
+  variant?: 'ghost' | 'secondary' | 'danger'
+  loading?: boolean
+}
+
+/** Tombol ikon dengan tooltip — dipakai kolom aksi tabel agar hemat tempat. */
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
+  { label, icon, variant = 'ghost', loading, className, disabled, ...rest },
+  ref
+) {
+  return (
+    <Tooltip label={label}>
+      <button
+        ref={ref}
+        type="button"
+        aria-label={label}
+        disabled={disabled || loading}
+        className={cn(
+          'inline-flex h-8 w-8 items-center justify-center rounded-full transition disabled:pointer-events-none disabled:opacity-50',
+          variant === 'ghost' && 'text-ink-500 hover:bg-surface-2 hover:text-brand-1',
+          variant === 'secondary' && 'border border-line bg-surface text-ink-700 hover:bg-surface-2',
+          variant === 'danger' && 'text-ink-500 hover:bg-pri-highbg hover:text-pri-high',
+          className
+        )}
+        {...rest}
+      >
+        {loading ? <Spinner /> : icon}
+      </button>
+    </Tooltip>
+  )
+})

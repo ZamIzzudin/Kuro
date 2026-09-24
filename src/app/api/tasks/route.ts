@@ -1,11 +1,12 @@
 // /api/tasks — GET (semua login; freelancer: miliknya + unassigned) & POST (admin)
 import type { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
-import { mapTask, sortTasks, TASK_INCLUDE } from '@/lib/tasks'
+import { createTaskAttachments } from '@/lib/attachments'
+import { mapTask, sortTasks, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
 import { dateOnlyUTC, wibLocalToDate } from '@/lib/time'
 import { taskCreateSchema } from '@/lib/validators'
 
@@ -24,9 +25,10 @@ export async function GET(req: Request) {
 
   const where: Prisma.TaskWhereInput = {}
 
-  // Scope (rule #12): freelancer hanya miliknya + unassigned (bucket bersama)
+  // Scope (rule #12 + enhancement project): freelancer hanya miliknya + bucket
+  // bersama (unassigned) di project tempat ia menjadi member.
   if (user.role === 'freelancer') {
-    where.OR = [{ assigneeId: user.id }, { assigneeId: null }]
+    Object.assign(where, freelancerTaskScope(user.id))
   } else if (assigneeId === 'unassigned') {
     where.assigneeId = null
   } else if (assigneeId) {
@@ -67,6 +69,7 @@ export async function POST(req: Request) {
     estimatedHours,
     requestDateLocal,
     deadlineLocal,
+    attachments,
   } = parsed.data
 
   // Validasi referensi harus ada & aktif
@@ -88,22 +91,29 @@ export async function POST(req: Request) {
     }
   }
 
-  const created = await db.task.create({
-    data: {
-      title,
-      description: description || null,
-      projectId,
-      workTypeId,
-      requesterId,
-      assigneeId: assigneeId || null,
-      priority,
-      estimatedHours: estimatedHours ?? null,
-      requestDate: dateOnlyUTC(requestDateLocal),
-      deadlineAt: wibLocalToDate(deadlineLocal),
-      createdById: admin.id,
-    },
-    include: TASK_INCLUDE,
-  })
+  const created = await db.$transaction(async (tx) => {
+    const task = await tx.task.create({
+      data: {
+        title,
+        description: description || null,
+        projectId,
+        workTypeId,
+        requesterId,
+        assigneeId: assigneeId || null,
+        priority,
+        estimatedHours: estimatedHours ?? null,
+        requestDate: dateOnlyUTC(requestDateLocal),
+        deadlineAt: wibLocalToDate(deadlineLocal),
+        createdById: admin.id,
+      },
+      include: TASK_INCLUDE,
+    })
+    if (attachments?.length) {
+      await createTaskAttachments(tx, task.id, admin.id, attachments)
+    }
+    // Ambil ulang agar lampiran ikut ter-mapping
+    return tx.task.findUniqueOrThrow({ where: { id: task.id }, include: TASK_INCLUDE })
+  }, TX_OPTIONS)
 
   await logActivity({
     userId: admin.id,
@@ -120,6 +130,7 @@ export async function POST(req: Request) {
       estimatedHours: estimatedHours ?? null,
       requestDate: requestDateLocal,
       deadlineAt: created.deadlineAt,
+      attachmentCount: attachments?.length ?? 0,
     },
     description: `${admin.name} membuat task "${title}"`,
   })

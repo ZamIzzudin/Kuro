@@ -35,7 +35,7 @@ export async function GET(req: Request) {
 
   const report = await getReportSummary({ year, month }, ids)
   const slug = `${periodLabel(year, month).toLowerCase().replace(/\s+/g, '-')}`
-  const filename = `notu-rekap-${slug}.${format}`
+  const filename = `kuro-rekap-${slug}.${format}`
 
   try {
     if (format === 'xlsx') {

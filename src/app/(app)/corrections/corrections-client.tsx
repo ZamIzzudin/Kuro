@@ -174,7 +174,7 @@ function CorrectionCard({ item }: { item: CorrectionItem }) {
             {formatWIB(c.clockInAt, 'dd MMM HH.mm')} –{' '}
             {c.active ? 'Berjalan' : formatWIB(c.clockOutAt!, 'dd MMM HH.mm')}
           </p>
-          <p className="font-mono text-ink-500">{formatMinutes(c.minutes)}</p>
+          <p className="tabular-nums text-ink-500">{formatMinutes(c.minutes)}</p>
         </div>
         {item.proposed.clockInAt && (
           <div>

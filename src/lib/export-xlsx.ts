@@ -1,4 +1,4 @@
-// Notu — export XLSX rekap bulanan (Fase 5 / F5)
+// Kuro — export XLSX rekap bulanan (Fase 5 / F5)
 // Sheet: Ringkasan (per freelancer) + Rincian (per hari/per task) + Per Project + Per Jenis Pekerjaan.
 import ExcelJS from 'exceljs'
 import { formatWIB, formatMinutes, periodLabel } from './time'
@@ -34,7 +34,7 @@ function addSheet(wb: ExcelJS.Workbook, name: string, title: string, cols: Col[]
 
   ws.mergeCells(2, 1, 2, cols.length)
   const sub = ws.getCell(2, 1)
-  sub.value = 'Notu — Freelancer Time & Task Tracker'
+  sub.value = 'Kuro — Keep You Inline'
   sub.font = { size: 10, color: { argb: 'FF9291A0' } }
 
   ws.addRow(cols.map((c) => c.header))
@@ -52,7 +52,7 @@ function pushRows(ws: ExcelJS.Worksheet, rows: Cell[][]) {
 /** Bangun buffer XLSX dari hasil rekap */
 export async function buildReportXlsx(report: ReportResponse): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'Notu'
+  wb.creator = 'Kuro'
   wb.created = new Date()
   const label = periodLabel(report.period.year, report.period.month)
 

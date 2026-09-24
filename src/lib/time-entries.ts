@@ -1,8 +1,9 @@
-// Notu — helper time entry (Fase 3 / F2)
+// Kuro — helper time entry (Fase 3 / F2)
 // Aturan bisnis: rule #1 (tanpa task tidak ada clock in), #2 (1 sesi aktif), #7 (auto-assign),
 // #11 (periode terkunci), #12 (freelancer hanya lihat miliknya).
 import type { Prisma, TaskStatus } from '@prisma/client'
 import { db } from './db'
+import { mapAttachment, type AttachmentItem } from './attachments'
 import { formatMinutes, wibYearMonth } from './time'
 
 export const TIME_ENTRY_INCLUDE = {
@@ -13,6 +14,7 @@ export const TIME_ENTRY_INCLUDE = {
       requester: { select: { id: true, name: true } },
     },
   },
+  attachments: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.TimeEntryInclude
 
 type TimeEntryWithTask = Prisma.TimeEntryGetPayload<{ include: typeof TIME_ENTRY_INCLUDE }>
@@ -30,12 +32,15 @@ export type TimeEntryItem = {
   task: {
     id: string
     title: string
+    status: TaskStatus
     project: { id: string; name: string }
     workType: { id: string; name: string }
     requester: { id: string; name: string }
   }
   /** label durasi siap tampil, mis. "2j 35m" */
   durationLabel: string
+  /** Lampiran yang diunggah saat clock out */
+  attachments: AttachmentItem[]
 }
 
 export function mapTimeEntry(e: TimeEntryWithTask, now = new Date()): TimeEntryItem {
@@ -52,11 +57,13 @@ export function mapTimeEntry(e: TimeEntryWithTask, now = new Date()): TimeEntryI
     task: {
       id: e.task.id,
       title: e.task.title,
+      status: e.task.status,
       project: { id: e.task.project.id, name: e.task.project.name },
       workType: { id: e.task.workType.id, name: e.task.workType.name },
       requester: { id: e.task.requester.id, name: e.task.requester.name },
     },
     durationLabel: minutes < 1 ? '< 1m' : formatMinutes(minutes),
+    attachments: e.attachments.map(mapAttachment),
   }
 }
 

@@ -13,7 +13,7 @@ import {
   LockOpen,
   Users,
 } from 'lucide-react'
-import { Button, ErrorNote, FieldLabel, Select, Spinner, Textarea } from '@/components/ui'
+import { Button, ErrorNote, FieldLabel, Select, Spinner, Textarea, Tooltip } from '@/components/ui'
 import { Sheet } from '@/components/sheet'
 import { apiSend, fetcher } from '@/lib/client'
 import { MONTH_NAMES, formatMinutes, formatWIB, periodLabel } from '@/lib/time'
@@ -253,7 +253,7 @@ export function ReportsClient() {
                   <tr className="border-t-2 border-line bg-surface-2/40 font-bold text-ink-900">
                     <td />
                     <td className="px-4 py-3">TOTAL</td>
-                    <td className="px-4 py-3 text-right font-mono">{formatMinutes(report.totalMinutes)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{formatMinutes(report.totalMinutes)}</td>
                     <td className="px-4 py-3 text-right">
                       {report.users.reduce((s, u) => s + u.workDays, 0)}
                     </td>
@@ -327,19 +327,21 @@ function UserRows({
     <>
       <tr className="border-t border-line transition hover:bg-surface-2/50">
         <td className="px-4 py-3">
-          <button
-            onClick={onToggle}
-            aria-label={open ? 'Tutup rincian' : 'Buka rincian'}
-            className="flex h-6 w-6 items-center justify-center rounded-full text-ink-400 transition hover:bg-surface-2 hover:text-brand-1"
-          >
-            {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </button>
+          <Tooltip label={open ? 'Tutup rincian' : 'Buka rincian'}>
+            <button
+              onClick={onToggle}
+              aria-label={open ? 'Tutup rincian' : 'Buka rincian'}
+              className="flex h-6 w-6 items-center justify-center rounded-full text-ink-400 transition hover:bg-surface-2 hover:text-brand-1"
+            >
+              {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          </Tooltip>
         </td>
         <td className="px-4 py-3">
           <p className="font-bold text-ink-900">{user.name}</p>
           <p className="text-[12px] text-ink-500">{user.email}</p>
         </td>
-        <td className="px-4 py-3 text-right font-mono font-bold text-ink-900">
+        <td className="px-4 py-3 text-right font-bold text-ink-900 tabular-nums">
           {formatMinutes(user.totalMinutes)}
         </td>
         <td className="px-4 py-3 text-right text-ink-700">{user.workDays}</td>
@@ -377,7 +379,7 @@ function UserRows({
                           <span className="text-[12.5px] font-bold text-ink-900">
                             {formatWIB(`${d.date}T00:00:00Z`, 'EEEE, dd MMM yyyy')}
                           </span>
-                          <span className="font-mono text-[12.5px] font-bold text-brand-1">
+                          <span className="text-[12.5px] font-bold text-brand-1 tabular-nums">
                             {formatMinutes(d.minutes)}
                           </span>
                         </div>
@@ -396,7 +398,7 @@ function UserRows({
                                 )}
                               </div>
                               <div className="shrink-0 text-right">
-                                <p className="font-mono text-[12.5px] font-bold text-ink-900">
+                                <p className="text-[12.5px] font-bold text-ink-900 tabular-nums">
                                   {e.minutes}m
                                 </p>
                                 <p className="text-[11px] text-ink-400">
@@ -439,7 +441,7 @@ function SummaryList({
               className="flex items-center justify-between border-b border-line-soft px-3 py-2 last:border-0"
             >
               <span className="truncate text-[13px] text-ink-700">{r.label}</span>
-              <span className="ml-3 shrink-0 font-mono text-[12.5px] font-bold text-ink-900">
+              <span className="ml-3 shrink-0 text-[12.5px] font-bold text-ink-900 tabular-nums">
                 {formatMinutes(r.minutes)}
               </span>
             </div>
