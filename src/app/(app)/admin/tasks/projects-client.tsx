@@ -5,6 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import {
   AlertTriangle,
+  CalendarClock,
   ChevronRight,
   FolderKanban,
   UserPlus,
@@ -132,12 +133,18 @@ export function AdminProjectsClient() {
                   <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-ink-300 transition group-hover:text-brand-1" />
                 </div>
 
-                {(p.overdue > 0 || p.unassigned > 0) && (
+                {(p.overdue > 0 || p.dueSoon > 0 || p.unassigned > 0) && (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     {p.overdue > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-pri-highbg px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-pri-high">
                         <AlertTriangle className="h-3 w-3" /> {p.overdue}{" "}
                         overdue
+                      </span>
+                    )}
+                    {p.dueSoon > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-pri-mediumbg px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-status-review">
+                        <CalendarClock className="h-3 w-3" /> {p.dueSoon}{" "}
+                        deadline ≤ 1 minggu
                       </span>
                     )}
                     {p.unassigned > 0 && (

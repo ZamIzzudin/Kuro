@@ -5,24 +5,29 @@
 import { useMemo, useRef, useState, type FormEvent } from "react";
 import useSWR from "swr";
 import {
+  AlertTriangle,
+  CalendarClock,
   Image as ImageIcon,
   Palette,
   Pencil,
   Plus,
   Search,
   Trash2,
+  TriangleAlert,
   Users,
 } from "lucide-react";
 import {
   Button,
   ErrorNote,
   FieldLabel,
+  IconButton,
   Input,
   Spinner,
   Textarea,
 } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
 import { StatusBadge } from "@/components/pills";
+import { TaskStatusDonut } from "@/components/status-donut";
 import { apiSend, fetcher } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import type { ProjectItem } from "@/lib/projects";
@@ -63,6 +68,8 @@ export function ProjectsAdminClient() {
   const [formTarget, setFormTarget] = useState<ProjectItem | "create" | null>(
     null,
   );
+  const [deleteTarget, setDeleteTarget] = useState<ProjectItem | null>(null);
+  const [banner, setBanner] = useState<string | null>(null);
 
   const projects = useMemo(
     () => projectsReq.data?.projects ?? [],
@@ -114,6 +121,12 @@ export function ProjectsAdminClient() {
         </div>
       )}
 
+      {banner && (
+        <div className="mb-4">
+          <ErrorNote>{banner}</ErrorNote>
+        </div>
+      )}
+
       {projectsReq.isLoading ? (
         <div className="flex items-center justify-center py-24 text-ink-400">
           <Spinner />{" "}
@@ -139,6 +152,7 @@ export function ProjectsAdminClient() {
               key={p.id}
               project={p}
               onEdit={() => setFormTarget(p)}
+              onDelete={() => setDeleteTarget(p)}
             />
           ))}
         </div>
@@ -152,6 +166,18 @@ export function ProjectsAdminClient() {
           freelancers={freelancers}
           onClose={() => setFormTarget(null)}
           onDone={() => projectsReq.mutate()}
+        />
+      )}
+
+      {deleteTarget && (
+        <DeleteProjectSheet
+          project={deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          onDone={async () => {
+            await projectsReq.mutate();
+            setBanner(null);
+          }}
+          onError={setBanner}
         />
       )}
     </div>
@@ -188,9 +214,11 @@ function BannerBlock({
 function ProjectAdminCard({
   project,
   onEdit,
+  onDelete,
 }: {
   project: ProjectItem;
   onEdit: () => void;
+  onDelete: () => void;
 }) {
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-line bg-surface shadow-soft">
@@ -224,15 +252,141 @@ function ProjectAdminCard({
           <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-brand-1">
             <Users className="h-3 w-3" /> {project.members.length} freelancer
           </span>
+          {project.overdue > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-pri-highbg px-2.5 py-1 text-pri-high">
+              <AlertTriangle className="h-3 w-3" /> {project.overdue} overdue
+            </span>
+          )}
+          {project.dueSoon > 0 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-pri-mediumbg px-2.5 py-1 text-status-review">
+              <CalendarClock className="h-3 w-3" /> {project.dueSoon} deadline ≤ 1 minggu
+            </span>
+          )}
         </div>
 
-        <div className="mt-4 flex justify-end border-t border-line-soft pt-3.5">
-          <Button variant="ghost" size="sm" onClick={onEdit}>
-            <Pencil className="h-3.5 w-3.5" /> Ubah
-          </Button>
+        <div className="mt-4 border-t border-line-soft pt-4">
+          <TaskStatusDonut counts={project.counts} />
+        </div>
+
+        <div className="mt-4 flex justify-end gap-1 border-t border-line-soft pt-3.5">
+          <IconButton
+            label="Ubah project"
+            icon={<Pencil className="h-4 w-4" />}
+            onClick={onEdit}
+          />
+          <IconButton
+            label="Hapus project"
+            variant="danger"
+            icon={<Trash2 className="h-4 w-4" />}
+            onClick={onDelete}
+          />
         </div>
       </div>
     </div>
+  );
+}
+
+function DeleteProjectSheet({
+  project,
+  onClose,
+  onDone,
+  onError,
+}: {
+  project: ProjectItem;
+  onClose: () => void;
+  onDone: () => Promise<void>;
+  onError: (msg: string | null) => void;
+}) {
+  const [confirmName, setConfirmName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const matches = confirmName.trim() === project.name;
+
+  async function submit() {
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSend(`/api/projects/${project.id}`, "DELETE", {
+        confirmName: confirmName.trim(),
+      });
+      onError(null);
+      await onDone();
+      onClose();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Gagal menghapus project";
+      setError(msg);
+      onError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Hapus Project"
+      description={project.name}
+    >
+      <div className="space-y-4">
+        <div className="flex gap-3 rounded-lg bg-pri-highbg px-3.5 py-3">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-pri-high" />
+          <p className="text-[13px] font-semibold text-pri-high">
+            Tindakan ini permanen. Seluruh data project ini akan dibersihkan:
+            task, time entry, koreksi, lampiran, dan banner.
+          </p>
+        </div>
+
+        <ul className="space-y-1.5 rounded-lg bg-surface-2 px-4 py-3 text-[12.5px] text-ink-700">
+          <li className="flex justify-between gap-2">
+            <span className="text-ink-500">Task</span>
+            <span className="font-bold tabular-nums">{project.taskCount}</span>
+          </li>
+          <li className="flex justify-between gap-2">
+            <span className="text-ink-500">Requester</span>
+            <span className="font-bold tabular-nums">
+              {project.requesters.length}
+            </span>
+          </li>
+          <li className="flex justify-between gap-2">
+            <span className="text-ink-500">Freelancer di-assign</span>
+            <span className="font-bold tabular-nums">
+              {project.members.length}
+            </span>
+          </li>
+        </ul>
+
+        <div>
+          <FieldLabel htmlFor="del-name">
+            Ketik <span className="text-ink-900">{project.name}</span> untuk
+            konfirmasi
+          </FieldLabel>
+          <Input
+            id="del-name"
+            autoComplete="off"
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.target.value)}
+            placeholder={project.name}
+          />
+        </div>
+
+        {error && <ErrorNote>{error}</ErrorNote>}
+
+        <div className="flex justify-end gap-2 border-t border-line-soft pt-4">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Batal
+          </Button>
+          <Button
+            variant="danger"
+            onClick={submit}
+            loading={saving}
+            disabled={!matches}
+          >
+            <Trash2 className="h-4 w-4" /> Hapus permanen
+          </Button>
+        </div>
+      </div>
+    </Sheet>
   );
 }
 

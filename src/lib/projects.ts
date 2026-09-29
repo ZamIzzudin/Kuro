@@ -9,7 +9,7 @@ export const PROJECT_INCLUDE = {
   requesters: {
     include: { requester: { select: { id: true, name: true, isActive: true } } },
   },
-  _count: { select: { tasks: true } },
+  tasks: { select: { status: true, deadlineAt: true } },
 } satisfies Prisma.ProjectInclude
 
 type ProjectWithRelations = Prisma.ProjectGetPayload<{ include: typeof PROJECT_INCLUDE }>
@@ -28,7 +28,14 @@ export type ProjectItem = {
   /** URL gambar banner (proxy, ikut cache-busting) — null bila tidak ada */
   bannerUrl: string | null
   isActive: boolean
+  /** jumlah task di project ini */
   taskCount: number
+  /** jumlah task per status (untuk donut ringkasan) */
+  counts: { todo: number; in_progress: number; review: number; done: number; cancelled: number }
+  /** task belum selesai yang sudah lewat tenggat */
+  overdue: number
+  /** task belum selesai yang tenggatnya dalam 7 hari ke depan (belum lewat) */
+  dueSoon: number
   members: ProjectMemberItem[]
   requesters: ProjectRequesterItem[]
   createdAt: string
@@ -40,7 +47,15 @@ export function bannerUrlFor(p: { id: string; bannerKey: string | null }): strin
   return `/api/projects/${p.id}/banner?v=${encodeURIComponent(p.bannerKey)}`
 }
 
-export function mapProject(p: ProjectWithRelations): ProjectItem {
+export function mapProject(p: ProjectWithRelations, now = new Date()): ProjectItem {
+  const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  let overdue = 0
+  let dueSoon = 0
+  for (const t of p.tasks) {
+    if (t.status === 'done' || t.status === 'cancelled') continue
+    if (t.deadlineAt < now) overdue += 1
+    else if (t.deadlineAt <= weekAhead) dueSoon += 1
+  }
   return {
     id: p.id,
     name: p.name,
@@ -49,7 +64,16 @@ export function mapProject(p: ProjectWithRelations): ProjectItem {
     hasBanner: Boolean(p.bannerKey),
     bannerUrl: bannerUrlFor(p),
     isActive: p.isActive,
-    taskCount: p._count.tasks,
+    taskCount: p.tasks.length,
+    counts: {
+      todo: p.tasks.filter((t) => t.status === 'todo').length,
+      in_progress: p.tasks.filter((t) => t.status === 'in_progress').length,
+      review: p.tasks.filter((t) => t.status === 'review').length,
+      done: p.tasks.filter((t) => t.status === 'done').length,
+      cancelled: p.tasks.filter((t) => t.status === 'cancelled').length,
+    },
+    overdue,
+    dueSoon,
     members: p.members.map((m) => ({
       id: m.user.id,
       name: m.user.name,

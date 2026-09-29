@@ -127,6 +127,8 @@ export type ProjectOverview = {
   /** task belum selesai (todo + in_progress + review) */
   active: number
   overdue: number
+  /** task belum selesai yang deadline-nya dalam 7 hari ke depan (belum lewat) */
+  dueSoon: number
   /** task yang di-assign ke user ini */
   mine: number
   /** task bucket bersama (belum di-assign) */

@@ -15,6 +15,9 @@
 /.prisma-gen/
 pw-run.log
 
+# template Excel (artefak dev, regenerate: npm run template:tasks)
+/templates/
+
 # next.js
 /.next/
 /out/

@@ -137,6 +137,11 @@ export const projectUpdateSchema = z
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>
 
+/** Hapus project — wajib mengetikkan nama project persis sebagai konfirmasi. */
+export const projectDeleteSchema = z.object({
+  confirmName: z.string().trim().min(1, 'Ketik nama project untuk konfirmasi'),
+})
+
 // ===== Fase 2: Task =====
 
 export const TASK_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'done'] as const

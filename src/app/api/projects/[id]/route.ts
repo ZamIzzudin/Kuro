@@ -8,7 +8,7 @@ import { parseJson, prismaError } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
 import { findProject, mapProject, setProjectRelations, validateProjectRelations } from '@/lib/projects'
 import { StorageNotConfiguredError, isStorageConfigured, removeObject } from '@/lib/storage'
-import { projectUpdateSchema } from '@/lib/validators'
+import { projectDeleteSchema, projectUpdateSchema } from '@/lib/validators'
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const { user, error } = await requireApiUser()
@@ -68,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         include: {
           members: { include: { user: { select: { id: true, name: true, email: true, isActive: true } } } },
           requesters: { include: { requester: { select: { id: true, name: true, isActive: true } } } },
-          _count: { select: { tasks: true } },
+          tasks: { select: { status: true, deadlineAt: true } },
         },
       })
     }, TX_OPTIONS)
@@ -105,4 +105,91 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (res) return res
     throw e
   }
+}
+
+// DELETE /api/projects/:id — hapus project BESERTA seluruh datanya (admin only).
+// Wajib mengetikkan nama project persis sebagai konfirmasi. Skema tidak memakai
+// onDelete cascade pada relasi Task/TimeEntry/Correction, jadi pembersihan
+// dilakukan berurutan di dalam transaksi, lalu objek MinIO (banner + lampiran)
+// dihapus best-effort setelah transaksi sukses.
+export async function DELETE(req: Request, { params }: { params: { id: string } }) {
+  const { user: admin, error } = await requireApiUser(['admin'])
+  if (error) return error
+
+  const parsed = await parseJson(req, projectDeleteSchema)
+  if (parsed.error) return parsed.error
+
+  const project = await findProject(params.id)
+  if (!project) return NextResponse.json({ error: 'Project tidak ditemukan.' }, { status: 404 })
+
+  if (parsed.data.confirmName !== project.name) {
+    return NextResponse.json(
+      { error: 'Nama project tidak cocok. Ketik persis sama untuk menghapus.' },
+      { status: 400 }
+    )
+  }
+
+  // Kumpulkan objek MinIO yang harus dibersihkan (banner + semua lampiran).
+  const [taskAttachments, entryAttachments] = await Promise.all([
+    db.taskAttachment.findMany({
+      where: { task: { projectId: params.id } },
+      select: { objectKey: true },
+    }),
+    db.timeEntryAttachment.findMany({
+      where: { timeEntry: { task: { projectId: params.id } } },
+      select: { objectKey: true },
+    }),
+  ])
+  const objectKeys = [
+    ...(project.bannerKey ? [project.bannerKey] : []),
+    ...taskAttachments.map((a) => a.objectKey),
+    ...entryAttachments.map((a) => a.objectKey),
+  ]
+
+  const taskIds = await db.task.findMany({
+    where: { projectId: params.id },
+    select: { id: true },
+  })
+
+  await db.$transaction(async (tx) => {
+    // Koreksi → TimeEntry → Task (TaskAttachment ikut cascade) → Project
+    // (ProjectMember & ProjectRequester ikut cascade).
+    await tx.correctionRequest.deleteMany({
+      where: { timeEntry: { task: { projectId: params.id } } },
+    })
+    await tx.timeEntry.deleteMany({ where: { task: { projectId: params.id } } })
+    if (taskIds.length) {
+      await tx.task.deleteMany({ where: { projectId: params.id } })
+    }
+    await tx.project.delete({ where: { id: params.id } })
+  }, TX_OPTIONS)
+
+  // Bersihkan objek MinIO setelah DB (best-effort, jangan gagalkan request).
+  if (isStorageConfigured() && objectKeys.length) {
+    await Promise.all(
+      objectKeys.map((key) =>
+        removeObject(key).catch((e) => {
+          if (!(e instanceof StorageNotConfiguredError))
+            console.error('Gagal menghapus objek project:', key, e)
+        })
+      )
+    )
+  }
+
+  await logActivity({
+    userId: admin.id,
+    action: 'project_deleted',
+    entityType: 'project',
+    entityId: params.id,
+    oldValue: {
+      name: project.name,
+      description: project.description,
+      bannerColor: project.bannerColor,
+      bannerKey: project.bannerKey,
+      taskCount: project.tasks.length,
+    },
+    description: `${admin.name} menghapus project "${project.name}" beserta ${project.tasks.length} task dan seluruh datanya`,
+  })
+
+  return NextResponse.json({ ok: true })
 }

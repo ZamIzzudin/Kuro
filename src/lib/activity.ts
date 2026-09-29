@@ -26,6 +26,7 @@ export type ActivityAction =
   | 'period_unlocked'
   | 'project_created'
   | 'project_updated'
+  | 'project_deleted'
   | 'master_created'
   | 'master_updated'
   | 'user_password_reset_by_admin'

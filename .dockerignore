@@ -21,6 +21,7 @@ build
 e2e
 tests
 scripts
+templates
 playwright.config.ts
 test-results
 playwright-report

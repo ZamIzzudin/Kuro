@@ -28,9 +28,12 @@ export async function GET() {
   })
 
   const now = new Date()
+  // Batas "deadline dalam 1 minggu" — dari sekarang s/d 7 hari ke depan.
+  const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const items: ProjectOverview[] = projects.map((p) => {
     const counts = { todo: 0, in_progress: 0, review: 0, done: 0, cancelled: 0 }
     let overdue = 0
+    let dueSoon = 0
     let mine = 0
     let unassigned = 0
     let active = 0
@@ -40,6 +43,7 @@ export async function GET() {
       if (t.status !== 'done' && t.status !== 'cancelled') {
         active += 1
         if (t.deadlineAt < now) overdue += 1
+        else if (t.deadlineAt <= weekAhead) dueSoon += 1
       }
       if (t.assigneeId === user.id) mine += 1
       if (t.assigneeId === null) unassigned += 1
@@ -54,6 +58,7 @@ export async function GET() {
       total: p.tasks.length,
       active,
       overdue,
+      dueSoon,
       mine,
       unassigned,
       counts,

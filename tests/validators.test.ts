@@ -8,6 +8,7 @@ import {
   correctionCreateSchema,
   correctionRejectSchema,
   profileUpdateSchema,
+  projectDeleteSchema,
   taskCreateSchema,
   taskUpdateSchema,
   timeEntryEditSchema,
@@ -175,4 +176,12 @@ test('changePasswordSchema: butuh password lama & password baru >= 8', () => {
     changePasswordSchema.safeParse({ currentPassword: 'lama12345', newPassword: 'baru' }).success,
     false
   )
+})
+
+test('projectDeleteSchema: wajib mengirim confirmName', () => {
+  assert.equal(projectDeleteSchema.safeParse({ confirmName: 'Website Revamp' }).success, true)
+  // kosong → gagal
+  assert.equal(projectDeleteSchema.safeParse({ confirmName: '' }).success, false)
+  assert.equal(projectDeleteSchema.safeParse({ confirmName: '   ' }).success, false)
+  assert.equal(projectDeleteSchema.safeParse({}).success, false)
 })

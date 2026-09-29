@@ -89,6 +89,19 @@ Buat **service PostgreSQL 16** di Dokploy (atau pakai yang sudah ada) → salin 
 | `SMTP_*` | — | Bila kosong, email reset dicetak ke log server. |
 | `MINIO_*` | — | Untuk lampiran & banner gambar. Tanpa ini, banner warna tetap jalan. |
 
+### Bulk import task dari Excel
+
+Fitur unggah massal **sengaja tidak dibuat di platform**. Cukup pakai Excel + skrip:
+
+```bash
+npm run template:tasks                 # buat templates/Template-Bulk-Task.xlsx
+# ... isi lembar "Task" ...
+npm run import:tasks -- "templates/Template-Bulk-Task.xlsx"          # validasi (dry-run)
+npm run import:tasks -- "templates/Template-Bulk-Task.xlsx" --yes    # tulis ke database
+```
+
+Kolom: Judul*, Deskripsi, Project*, Jenis Pekerjaan*, Requester*, Assignee, Prioritas, Estimasi (jam), Tanggal Request*, Deadline (tanggal)*, Jam Deadline, Status. Tanda `*` wajib. Assignee kosong = bucket bersama. Format tanggal `YYYY-MM-DD`, jam `HH:MM` (WIB). Bila ada baris tidak valid, skrip menampilkan nomor baris & alasannya dan **tidak menulis apa pun**.
+
 **4. Deploy**
 
 Deploy pertama kali: set `RUN_DB_SEED=true` agar admin + master sample dibuat, lalu kembalikan ke `false` pada deploy berikutnya. Entrypoint akan otomatis menjalankan `prisma db push` + `constraints.sql` tiap start (idempotent).
@@ -97,7 +110,12 @@ Deploy pertama kali: set `RUN_DB_SEED=true` agar admin + master sample dibuat, l
 
 ## Catatan teknis
 
-- **Project lanjutan**: Project dikelola di `/admin/projects` (bukan Master Data) — mendukung **banner** (gambar unggahan ke MinIO **atau** background warna), **requester per-project** (banyak-pilih), **deskripsi**, aktif/nonaktif, dan **assign freelancer**. Freelancer hanya melihat project/task yang di-assign ke mereka.
+- **Project lanjutan**: Project dikelola di `/admin/projects` (bukan Master Data) — mendukung **banner** (gambar unggahan ke MinIO **atau** background warna), **requester per-project** (banyak-pilih), **deskripsi**, aktif/nonaktif, **assign freelancer**, **donut status task**, dan **hapus project**. Freelancer hanya melihat project/task yang di-assign ke mereka.
+- **Hapus project** (`DELETE /api/projects/:id`, admin): wajib mengetikkan **nama project persis** sebagai konfirmasi. Karena skema tidak memakai `onDelete: cascade` pada relasi Task/TimeEntry/Correction, penghapusan dibersihkan berurutan di dalam satu transaksi (koreksi → time entry → task → project) dan objek MinIO (banner + seluruh lampiran) dihapus setelahnya. Ter-audit sebagai `project_deleted`.
+- **Deadline dekat**: card project di `/admin/tasks` menampilkan badge **“deadline ≤ 1 minggu”** — jumlah task belum selesai yang tenggatnya dalam 7 hari ke depan (di luar yang sudah overdue), dari `dueSoon` pada `GET /api/projects/overview`.
+- **Bulk import task (tanpa fitur di platform)**: hanya berupa berkas Excel di `templates/`.
+  - `npm run template:tasks` → membuat `templates/Template-Bulk-Task.xlsx` (isinya membaca project/jenis pekerjaan/requester/freelancer aktif saat itu, jadi selalu sinkron). Lembar: **Task** (diisi, header baris 3, data mulai baris 4, ada dropdown), **Contoh**, **Referensi** (sumber dropdown), **Petunjuk**.
+  - `npm run import:tasks -- "templates/Template-Bulk-Task.xlsx"` → **dry-run** (validasi saja, tidak menulis). Tambahkan `--yes` untuk menulis (transaksi atomik — bila ada 1 baris tidak valid, tidak ada yang tersimpan). Referensi dicocokkan berdasarkan **nama**; tanggal/jam dianggap **WIB**.
 - **Banner project**: mode gambar (`POST /api/uploads/project-banner` → MinIO, maks 2 MB, PNG/JPEG/WebP) atau warna HEX. Gambar ditampilkan via proxy `GET /api/projects/:id/banner` (cookie sesi ikut, object key tetap privat, cache immutable). Bila MinIO belum dikonfigurasi, mode warna tetap berfungsi dan unggah gambar menampilkan pesan jelas. Saat gambar diganti/dihapus, objek lama dibersihkan dari MinIO. Setup: `npm run storage:check`.
   - **Kuro mengakses MinIO dari sisi server**, bukan dari browser — jadi cukup endpoint yang bisa dijangkau server.
   - Bila MinIO di balik domain HTTPS (mis. `s3.notu.dev`): `MINIO_ENDPOINT=s3.notu.dev`, `MINIO_PORT=` (kosongkan), `MINIO_USE_SSL=true`. Port kosong otomatis jadi **443** (HTTPS) atau **9000** (HTTP).

@@ -21,7 +21,7 @@ export async function GET() {
       : { isActive: true, ...freelancerProjectScope(user.id) }
 
   const projects = await listProjects(where)
-  return NextResponse.json({ projects: projects.map(mapProject) })
+  return NextResponse.json({ projects: projects.map((p) => mapProject(p)) })
 }
 
 export async function POST(req: Request) {
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         include: {
           members: { include: { user: { select: { id: true, name: true, email: true, isActive: true } } } },
           requesters: { include: { requester: { select: { id: true, name: true, isActive: true } } } },
-          _count: { select: { tasks: true } },
+          tasks: { select: { status: true, deadlineAt: true } },
         },
       })
     }, TX_OPTIONS)
