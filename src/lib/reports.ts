@@ -10,6 +10,8 @@ export type ReportEntry = {
   id: string
   taskId: string
   taskTitle: string
+  subtaskId: string
+  subtaskTitle: string
   project: string
   workType: string
   requester: string
@@ -107,11 +109,15 @@ export async function getReportSummary(
       clockInAt: { gte: from, lte: to },
     },
     include: {
-      task: {
+      subtask: {
         include: {
-          project: { select: { name: true } },
-          workType: { select: { name: true } },
-          requester: { select: { name: true } },
+          task: {
+            include: {
+              project: { select: { name: true } },
+              workType: { select: { name: true } },
+              requester: { select: { name: true } },
+            },
+          },
         },
       },
     },
@@ -145,14 +151,17 @@ export async function getReportSummary(
     const row = perUser.get(e.userId)
     if (!row || !e.clockOutAt) continue
 
+    const task = e.subtask.task
     const minutes = Math.max(0, Math.floor((e.clockOutAt.getTime() - e.clockInAt.getTime()) / 60_000))
     const entry: ReportEntry = {
       id: e.id,
-      taskId: e.taskId,
-      taskTitle: e.task.title,
-      project: e.task.project.name,
-      workType: e.task.workType.name,
-      requester: e.task.requester.name,
+      taskId: task.id,
+      taskTitle: task.title,
+      subtaskId: e.subtask.id,
+      subtaskTitle: e.subtask.title,
+      project: task.project.name,
+      workType: task.workType.name,
+      requester: task.requester.name,
       clockInAt: e.clockInAt.toISOString(),
       clockOutAt: e.clockOutAt.toISOString(),
       minutes,
@@ -165,21 +174,21 @@ export async function getReportSummary(
 
     const date = wibDate(e.clockInAt)
 
-    // per task
+    // per task (rollup — subtask dijumlahkan ke task induknya)
     const tMap = taskMap.get(e.userId) ?? new Map<string, ReportByTask>()
-    const tRow = tMap.get(e.taskId) ?? {
-      taskId: e.taskId,
-      title: e.task.title,
-      project: e.task.project.name,
-      workType: e.task.workType.name,
-      requester: e.task.requester.name,
+    const tRow = tMap.get(task.id) ?? {
+      taskId: task.id,
+      title: task.title,
+      project: task.project.name,
+      workType: task.workType.name,
+      requester: task.requester.name,
       minutes: 0,
       entryCount: 0,
       days: 0,
     }
     tRow.minutes += minutes
     tRow.entryCount += 1
-    tMap.set(e.taskId, tRow)
+    tMap.set(task.id, tRow)
     taskMap.set(e.userId, tMap)
 
     // per project

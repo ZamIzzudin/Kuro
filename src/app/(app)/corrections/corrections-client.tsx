@@ -188,11 +188,11 @@ function CorrectionCard({ item }: { item: CorrectionItem }) {
             <p className="mt-1 text-ink-900">{formatWIB(item.proposed.clockOutAt, 'dd MMM HH.mm')}</p>
           </div>
         )}
-        {item.proposed.taskId && (
+        {item.proposed.subtaskId && (
           <div>
-            <p className="font-bold uppercase tracking-wide text-brand-1">Usulan Task</p>
+            <p className="font-bold uppercase tracking-wide text-brand-1">Usulan Subtask</p>
             <p className="mt-1 text-ink-900">
-              {item.proposed.taskTitle ?? 'Task tidak diketahui'}
+              {item.proposed.subtaskTitle ?? 'Subtask tidak diketahui'}
             </p>
           </div>
         )}
@@ -235,13 +235,13 @@ function CorrectionSheet({
   const [clockOut, setClockOut] = useState(
     selected.clockOutAt ? dateToWibLocal(selected.clockOutAt) : ''
   )
-  const [taskId, setTaskId] = useState(selected.task.id)
+  const [subtaskId, setSubtaskId] = useState(selected.subtask.id)
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const tasksReq = useSWR<{ tasks: Array<{ id: string; title: string }> }>(
-    '/api/tasks/available',
+  const subtasksReq = useSWR<{ subtasks: Array<{ id: string; title: string }> }>(
+    '/api/subtasks/available',
     fetcher
   )
 
@@ -255,7 +255,7 @@ function CorrectionSheet({
     onSelect(e)
     setClockIn(dateToWibLocal(e.clockInAt))
     setClockOut(e.clockOutAt ? dateToWibLocal(e.clockOutAt) : '')
-    setTaskId(e.task.id)
+    setSubtaskId(e.subtask.id)
   }
 
   async function submit() {
@@ -266,7 +266,7 @@ function CorrectionSheet({
         timeEntryId: entryId,
         newClockInLocal: clockIn,
         newClockOutLocal: clockOut || null,
-        newTaskId: taskId,
+        newSubtaskId: subtaskId,
         reason: reason.trim(),
       })
       await onDone('Pengajuan koreksi terkirim. Menunggu review admin.')
@@ -296,7 +296,7 @@ function CorrectionSheet({
           <Select id="cor-entry" value={entryId} onChange={(e) => pickEntry(e.target.value)}>
             {entries.map((e) => (
               <option key={e.id} value={e.id}>
-                {formatWIB(e.clockInAt, 'dd MMM HH.mm')} — {e.task.title}
+                {formatWIB(e.clockInAt, 'dd MMM HH.mm')} — {e.subtask.title}
               </option>
             ))}
           </Select>
@@ -333,9 +333,9 @@ function CorrectionSheet({
         </div>
 
         <div>
-          <FieldLabel htmlFor="cor-task">Task</FieldLabel>
-          <Select id="cor-task" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-            {(tasksReq.data?.tasks ?? [{ id: entry.task.id, title: entry.task.title }]).map((t) => (
+          <FieldLabel htmlFor="cor-task">Subtask</FieldLabel>
+          <Select id="cor-task" value={subtaskId} onChange={(e) => setSubtaskId(e.target.value)}>
+            {(subtasksReq.data?.subtasks ?? [{ id: entry.subtask.id, title: entry.subtask.title }]).map((t) => (
               <option key={t.id} value={t.id}>
                 {t.title}
               </option>

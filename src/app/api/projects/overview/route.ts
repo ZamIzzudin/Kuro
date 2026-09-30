@@ -22,7 +22,13 @@ export async function GET() {
     include: {
       tasks: {
         where: taskScope,
-        select: { status: true, deadlineAt: true, assigneeId: true },
+        select: {
+          status: true,
+          deadlineAt: true,
+          sprintId: true,
+          sprint: { select: { status: true } },
+          _count: { select: { assignees: true } },
+        },
       },
     },
   })
@@ -34,19 +40,21 @@ export async function GET() {
     const counts = { todo: 0, in_progress: 0, review: 0, done: 0, cancelled: 0 }
     let overdue = 0
     let dueSoon = 0
-    let mine = 0
-    let unassigned = 0
     let active = 0
+    let inActiveSprint = 0
+    let backlog = 0
+    let unassigned = 0
 
     for (const t of p.tasks) {
       counts[t.status] += 1
+      if (t.sprintId === null) backlog += 1
+      else if (t.sprint?.status === 'active') inActiveSprint += 1
+      if (t._count.assignees === 0 && t.status !== 'done' && t.status !== 'cancelled') unassigned += 1
       if (t.status !== 'done' && t.status !== 'cancelled') {
         active += 1
         if (t.deadlineAt < now) overdue += 1
         else if (t.deadlineAt <= weekAhead) dueSoon += 1
       }
-      if (t.assigneeId === user.id) mine += 1
-      if (t.assigneeId === null) unassigned += 1
     }
 
     return {
@@ -59,7 +67,8 @@ export async function GET() {
       active,
       overdue,
       dueSoon,
-      mine,
+      inActiveSprint,
+      backlog,
       unassigned,
       counts,
     }

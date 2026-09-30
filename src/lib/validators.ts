@@ -142,9 +142,14 @@ export const projectDeleteSchema = z.object({
   confirmName: z.string().trim().min(1, 'Ketik nama project untuk konfirmasi'),
 })
 
-// ===== Fase 2: Task =====
+// ===== Fase 2: Sprint / Task / Subtask =====
 
 export const TASK_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'done'] as const
+
+export const SPRINT_STATUS_OPTIONS = ['planned', 'active', 'completed'] as const
+
+/** Panjang deskripsi (Markdown) — dinaikkan dari 2000 agar cukup untuk format MD */
+const DESCRIPTION_MAX = 20_000
 
 const estimatedHoursField = z
   .number({ invalid_type_error: 'Estimasi harus berupa angka' })
@@ -167,32 +172,115 @@ export const attachmentInputSchema = z.object({
 
 export type AttachmentInputPayload = z.infer<typeof attachmentInputSchema>
 
+const sprintNameField = z
+  .string()
+  .trim()
+  .min(2, 'Nama sprint minimal 2 karakter')
+  .max(120, 'Nama sprint maksimal 120 karakter')
+
+const sprintGoalField = z
+  .string()
+  .trim()
+  .max(DESCRIPTION_MAX, 'Sprint goal terlalu panjang')
+  .optional()
+  .nullable()
+
+export const sprintCreateSchema = z
+  .object({
+    projectId: z.string().min(1, 'Project wajib dipilih'),
+    name: sprintNameField,
+    goal: sprintGoalField,
+    startDate: dateOnlyField,
+    endDate: dateOnlyField,
+  })
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'Tanggal selesai tidak boleh sebelum tanggal mulai',
+    path: ['endDate'],
+  })
+
+export const sprintUpdateSchema = z
+  .object({
+    name: sprintNameField.optional(),
+    goal: sprintGoalField,
+    startDate: dateOnlyField.optional(),
+    endDate: dateOnlyField.optional(),
+    status: z.enum(SPRINT_STATUS_OPTIONS).optional(),
+  })
+  .refine(
+    (v) =>
+      v.name !== undefined ||
+      v.goal !== undefined ||
+      v.startDate !== undefined ||
+      v.endDate !== undefined ||
+      v.status !== undefined,
+    { message: 'Tidak ada perubahan' }
+  )
+
+/** Task belum selesai saat sprint ditutup — dipindah ke backlog (default) atau sprint lain. */
+export const sprintCompleteSchema = z.object({
+  /** id sprint tujuan untuk task yang belum selesai; kosong = lempar ke backlog */
+  moveToSprintId: z.string().min(1).optional().nullable(),
+})
+
+/** Satu baris subtask dalam payload task (buat/ubah). `id` ada = subtask lama. */
+export const subtaskInputSchema = z.object({
+  id: z.string().min(1).optional(),
+  title: z.string().trim().min(1, 'Judul subtask wajib diisi').max(150, 'Judul subtask maksimal 150 karakter'),
+  description: z.string().trim().max(DESCRIPTION_MAX, 'Deskripsi subtask terlalu panjang').optional().nullable(),
+  assigneeId: z.string().min(1).optional().nullable(),
+  estimatedHours: estimatedHoursField.optional().nullable(),
+  position: z.number().int().min(0).max(9999).optional(),
+})
+
+export type SubtaskInput = z.infer<typeof subtaskInputSchema>
+
+export const subtaskUpdateSchema = z
+  .object({
+    title: z.string().trim().min(1, 'Judul subtask wajib diisi').max(150).optional(),
+    description: z.string().trim().max(DESCRIPTION_MAX).optional().nullable(),
+    assigneeId: z.string().min(1).optional().nullable(),
+    estimatedHours: estimatedHoursField.optional().nullable(),
+    position: z.number().int().min(0).max(9999).optional(),
+    addAttachments: z.array(attachmentInputSchema).max(50).optional(),
+    removeAttachmentIds: z.array(z.string().min(1)).max(100).optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'Tidak ada perubahan' })
+
 export const taskCreateSchema = z.object({
   title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120, 'Judul maksimal 120 karakter'),
-  description: z.string().trim().max(2000, 'Deskripsi maksimal 2000 karakter').optional().nullable(),
+  description: z.string().trim().max(DESCRIPTION_MAX, 'Deskripsi terlalu panjang').optional().nullable(),
   projectId: z.string().min(1, 'Project wajib dipilih'),
+  // NULL = Backlog (di luar sprint)
+  sprintId: z.string().min(1).optional().nullable(),
   workTypeId: z.string().min(1, 'Jenis pekerjaan wajib dipilih'),
   requesterId: z.string().min(1, 'Requester wajib dipilih'),
-  assigneeId: z.string().optional().nullable(),
+  // Multi-assignee: daftar freelancer yang boleh mengerjakan subtask task ini
+  assigneeIds: z.array(z.string().min(1)).max(50, 'Terlalu banyak assignee').optional(),
   priority: z.enum(['high', 'medium', 'low']).default('medium'),
   estimatedHours: estimatedHoursField.optional().nullable(),
   requestDateLocal: dateOnlyField,
   deadlineLocal: dateTimeField,
   attachments: z.array(attachmentInputSchema).max(50).optional(),
+  // Subtask awal — wajib minimal satu agar senantiasa ada unit kerja
+  subtasks: z.array(subtaskInputSchema).min(1, 'Minimal satu subtask').max(100, 'Terlalu banyak subtask'),
 })
 
 export const taskUpdateSchema = z.object({
   title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120).optional(),
-  description: z.string().trim().max(2000).optional().nullable(),
+  description: z.string().trim().max(DESCRIPTION_MAX).optional().nullable(),
   projectId: z.string().min(1).optional(),
+  sprintId: z.string().min(1).optional().nullable(),
   workTypeId: z.string().min(1).optional(),
   requesterId: z.string().min(1).optional(),
-  assigneeId: z.string().optional().nullable(),
+  assigneeIds: z.array(z.string().min(1)).max(50).optional(),
   priority: z.enum(['high', 'medium', 'low']).optional(),
   estimatedHours: estimatedHoursField.optional().nullable(),
   requestDateLocal: dateOnlyField.optional(),
   deadlineLocal: dateTimeField.optional(),
   status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
+  // Sinkronisasi daftar subtask: item tanpa `id` dibuat, item dengan `id` diperbarui.
+  // Subtask lama yang tidak ada di daftar akan dihapus (bila belum punya time entry).
+  subtasks: z.array(subtaskInputSchema).max(100).optional(),
   // Lampiran BARU yang ditambahkan (bukan pengganti).
   addAttachments: z.array(attachmentInputSchema).max(50).optional(),
   // Id lampiran task yang dihapus.
@@ -203,17 +291,24 @@ export const taskStatusSchema = z.object({
   status: z.enum(TASK_STATUS_OPTIONS, { errorMap: () => ({ message: 'Status tidak valid' }) }),
 })
 
+// ===== Subtask (unit kerja) =====
+
+/** Freelancer mengubah status subtask miliknya (setara done-lock lama) */
+export const subtaskStatusSchema = z.object({
+  status: z.enum(TASK_STATUS_OPTIONS, { errorMap: () => ({ message: 'Status tidak valid' }) }),
+})
+
 // ===== Fase 3: Time Entries (F2) =====
 
 /** Status task yang boleh dipilih saat clock out (rule #9) */
 export const CHECKOUT_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'done'] as const
 
 export const clockInSchema = z.object({
-  taskId: z.string().min(1, 'Task wajib dipilih'),
+  subtaskId: z.string().min(1, 'Subtask wajib dipilih'),
 })
 
 export const switchTaskSchema = z.object({
-  taskId: z.string().min(1, 'Task wajib dipilih'),
+  subtaskId: z.string().min(1, 'Subtask wajib dipilih'),
   // Q4: note saat switch OPSIONAL
   note: z.string().trim().max(1000, 'Catatan maksimal 1000 karakter').optional().nullable(),
 })
@@ -221,8 +316,8 @@ export const switchTaskSchema = z.object({
 export const clockOutSchema = z.object({
   // rule #9: note wajib minimal 10 karakter
   note: z.string().trim().min(10, 'Catatan minimal 10 karakter').max(2000, 'Catatan maksimal 2000 karakter'),
-  taskStatus: z.enum(CHECKOUT_STATUS_OPTIONS, {
-    errorMap: () => ({ message: 'Status task tidak valid' }),
+  subtaskStatus: z.enum(CHECKOUT_STATUS_OPTIONS, {
+    errorMap: () => ({ message: 'Status subtask tidak valid' }),
   }),
   // Lampiran opsional saat clock out — jumlah tidak dibatasi.
   attachments: z.array(attachmentInputSchema).max(50).optional(),
@@ -278,15 +373,15 @@ export const correctionCreateSchema = z
     timeEntryId: z.string().min(1, 'Time entry wajib dipilih'),
     newClockInLocal: dateTimeField.optional().nullable(),
     newClockOutLocal: dateTimeField.optional().nullable(),
-    newTaskId: z.string().min(1).optional().nullable(),
+    newSubtaskId: z.string().min(1).optional().nullable(),
     reason: z
       .string({ required_error: 'Alasan wajib diisi', invalid_type_error: 'Alasan wajib diisi' })
       .trim()
       .min(10, 'Alasan minimal 10 karakter')
       .max(1000, 'Alasan maksimal 1000 karakter'),
   })
-  .refine((v) => !!v.newClockInLocal || !!v.newClockOutLocal || !!v.newTaskId, {
-    message: 'Isi minimal satu perubahan (jam masuk, jam keluar, atau task)',
+  .refine((v) => !!v.newClockInLocal || !!v.newClockOutLocal || !!v.newSubtaskId, {
+    message: 'Isi minimal satu perubahan (jam masuk, jam keluar, atau subtask)',
   })
 
 export type CorrectionCreateInput = z.infer<typeof correctionCreateSchema>
@@ -305,7 +400,7 @@ export const timeEntryEditSchema = z
   .object({
     clockInLocal: dateTimeField.optional(),
     clockOutLocal: dateTimeField.optional().nullable(),
-    taskId: z.string().min(1).optional(),
+    subtaskId: z.string().min(1).optional(),
     note: z.string().trim().max(2000, 'Catatan maksimal 2000 karakter').optional().nullable(),
     reason: z
       .string({ required_error: 'Alasan wajib diisi', invalid_type_error: 'Alasan wajib diisi' })
@@ -317,7 +412,7 @@ export const timeEntryEditSchema = z
     (v) =>
       v.clockInLocal !== undefined ||
       v.clockOutLocal !== undefined ||
-      v.taskId !== undefined ||
+      v.subtaskId !== undefined ||
       v.note !== undefined,
     { message: 'Tidak ada perubahan' }
   )

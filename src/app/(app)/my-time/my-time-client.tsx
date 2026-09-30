@@ -52,8 +52,9 @@ export function MyTimeClient() {
   const visible = entries.filter(
     (e) =>
       q.trim() === '' ||
-      e.task.title.toLowerCase().includes(q.trim().toLowerCase()) ||
-      e.task.project.name.toLowerCase().includes(q.trim().toLowerCase())
+      e.subtask.title.toLowerCase().includes(q.trim().toLowerCase()) ||
+      e.subtask.taskTitle.toLowerCase().includes(q.trim().toLowerCase()) ||
+      e.subtask.project.name.toLowerCase().includes(q.trim().toLowerCase())
   )
 
   return (
@@ -128,7 +129,7 @@ export function MyTimeClient() {
           <table className="w-full min-w-[720px] text-sm">
             <thead>
               <tr className="bg-surface-2/60 text-left text-[11px] font-bold uppercase tracking-wider text-ink-400">
-                <th className="px-5 py-3">Task</th>
+                <th className="px-5 py-3">Subtask</th>
                 <th className="px-5 py-3">Mulai</th>
                 <th className="px-5 py-3">Selesai</th>
                 <th className="px-5 py-3">Durasi</th>
@@ -140,9 +141,9 @@ export function MyTimeClient() {
               {visible.map((e) => (
                 <tr key={e.id} className="border-t border-line align-top transition hover:bg-surface-2/50">
                   <td className="px-5 py-3.5">
-                    <p className="font-bold text-ink-900">{e.task.title}</p>
+                    <p className="font-bold text-ink-900">{e.subtask.title}</p>
                     <p className="mt-0.5 text-[12.5px] text-ink-500">
-                      {e.task.project.name} · {e.task.workType.name}
+                      {e.subtask.taskTitle} · {e.subtask.project.name} · {e.subtask.workType.name}
                     </p>
                   </td>
                   <td className="px-5 py-3.5 text-[13px] text-ink-700">{formatWIB(e.clockInAt)}</td>

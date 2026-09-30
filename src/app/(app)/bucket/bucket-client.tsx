@@ -1,44 +1,42 @@
 "use client";
 
-// Task Bucket freelancer — langsung menampilkan papan task project yang dipilih.
-// Perpindahan project HANYA lewat dropdown di sidebar (ProjectSwitcher),
-// sehingga halaman ini tidak punya pemilih project sendiri.
+// Task Bucket freelancer — papan SUBTASK (unit kerja) dalam project terpilih.
+// Dua scope: Sprint Aktif (default) dan Backlog. Freelancer hanya bisa mengerjakan
+// subtask di sprint aktif; kartu backlog ditampilkan read-only sebagai informasi.
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { ArrowRight, CalendarDays, FolderKanban } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 import { ErrorNote, Select, Spinner } from "@/components/ui";
-import {
-  OverdueBadge,
-  PriorityBadge,
-  STATUS_META,
-  TaskProgress,
-} from "@/components/task-bits";
-import { TaskDetailSheet } from "@/components/task-detail";
+import { OverdueBadge, PriorityBadge, STATUS_META } from "@/components/task-bits";
+import { SubtaskDetailSheet } from "@/components/subtask-detail";
 import { useProjectScope } from "@/components/project-scope";
 import { apiSend, fetcher } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { formatDateShortWIB } from "@/lib/time";
-import type { TaskItem } from "@/lib/tasks";
+import type { TaskItem, SubtaskItem } from "@/lib/tasks";
 import type { ProjectItem } from "@/lib/projects";
 
 const COLUMNS: TaskStatus[] = ["todo", "in_progress", "review", "done"];
 
+type Scope = "active" | "backlog";
+
+type Card = {
+  subtask: SubtaskItem;
+  task: Pick<TaskItem, "id" | "title" | "priority" | "deadlineAt" | "overdue" | "workType" | "requester" | "project">;
+};
+
 export function BucketClient() {
-  const {
-    projectId,
-    projects,
-    isLoading: scopeLoading,
-    hasNone,
-  } = useProjectScope();
+  const { projectId, projects, isLoading: scopeLoading, hasNone } = useProjectScope();
   const me = useSWR<{ user: { id: string } | null }>("/api/auth/me", fetcher);
+
+  const [scope, setScope] = useState<Scope>("active");
   const tasksReq = useSWR<{ tasks: TaskItem[] }>(
-    projectId ? `/api/tasks?projectId=${projectId}` : null,
+    projectId ? `/api/tasks?projectId=${projectId}&sprintId=${scope}` : null,
     fetcher,
   );
 
-  const [fStatus, setFStatus] = useState("all");
   const [fPriority, setFPriority] = useState("all");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,28 +45,45 @@ export function BucketClient() {
   const [overCol, setOverCol] = useState<TaskStatus | null>(null);
 
   const myId = me.data?.user?.id;
-  const project: ProjectItem | undefined = projects.find(
-    (p) => p.id === projectId,
-  );
+  const project: ProjectItem | undefined = projects.find((p) => p.id === projectId);
   const tasks = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data]);
 
-  // Hanya task milik sendiri & belum selesai yang boleh dipindah lewat drag
-  const canDrag = (t: TaskItem) =>
-    t.assigneeId === myId && t.status !== "done" && t.status !== "cancelled";
-
-  const filtered = tasks.filter(
-    (t) =>
-      t.status !== "cancelled" &&
-      (fStatus === "all" || t.status === fStatus) &&
-      (fPriority === "all" || t.priority === fPriority),
+  // Ratakan subtask menjadi kartu kanban (satu kartu = satu subtask)
+  const cards: Card[] = useMemo(
+    () =>
+      tasks.flatMap((t) =>
+        t.subtasks.map((s) => ({
+          subtask: s,
+          task: {
+            id: t.id,
+            title: t.title,
+            priority: t.priority,
+            deadlineAt: t.deadlineAt,
+            overdue: t.overdue,
+            workType: t.workType,
+            requester: t.requester,
+            project: t.project,
+          },
+        })),
+      ),
+    [tasks],
   );
-  const columns = COLUMNS.filter((c) => fStatus === "all" || fStatus === c);
 
-  async function changeStatus(task: TaskItem, status: string) {
-    setBusyId(task.id);
+  const canDrag = (c: Card) =>
+    scope === "active" &&
+    c.subtask.status !== "done" &&
+    c.subtask.status !== "cancelled" &&
+    (c.subtask.assigneeId === null || c.subtask.assigneeId === myId);
+
+  const filtered = cards.filter(
+    (c) => c.subtask.status !== "cancelled" && (fPriority === "all" || c.task.priority === fPriority),
+  );
+
+  async function changeStatus(card: Card, status: string) {
+    setBusyId(card.subtask.id);
     setError(null);
     try {
-      await apiSend(`/api/tasks/${task.id}/status`, "PATCH", { status });
+      await apiSend(`/api/subtasks/${card.subtask.id}/status`, "PATCH", { status });
       await tasksReq.mutate();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal mengubah status");
@@ -79,25 +94,22 @@ export function BucketClient() {
 
   function dropTo(col: TaskStatus) {
     setOverCol(null);
-    const task = tasks.find((t) => t.id === dragId);
+    const card = cards.find((c) => c.subtask.id === dragId);
     setDragId(null);
-    if (!task || !canDrag(task) || task.status === col || busyId) return;
-    changeStatus(task, col);
+    if (!card || !canDrag(card) || card.subtask.status === col || busyId) return;
+    changeStatus(card, col);
   }
 
-  // Belum di-assign ke project mana pun → beri panduan, bukan papan kosong
   if (hasNone) {
     return (
       <div className="mx-auto max-w-[1400px]">
         <h1 className="font-heading text-[22px] font-extrabold">Task Bucket</h1>
         <div className="mt-5 rounded-xl border border-dashed border-line bg-surface px-5 py-4 shadow-soft">
           <p className="flex items-center gap-2 text-sm font-bold text-ink-900">
-            <FolderKanban className="h-4 w-4 text-brand-1" /> Belum di-assign ke
-            project
+            <FolderKanban className="h-4 w-4 text-brand-1" /> Belum di-assign ke project
           </p>
           <p className="mt-1 text-sm text-ink-500">
-            Anda belum ditambahkan ke project mana pun. Hubungi admin agar bisa
-            mengerjakan task.
+            Anda belum ditambahkan ke project mana pun. Hubungi admin agar bisa mengerjakan task.
           </p>
         </div>
       </div>
@@ -106,37 +118,35 @@ export function BucketClient() {
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <div className="mb-5">
-        <h1 className="font-heading text-[22px] font-extrabold">
-          {project?.name ?? "Task Bucket"}
-        </h1>
-        <p className="mt-1 text-sm text-ink-500">
-          {tasks.length} task · task tanpa assignee bisa diambil lewat clock in
-        </p>
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-[22px] font-extrabold">{project?.name ?? "Task Bucket"}</h1>
+          <p className="mt-1 text-sm text-ink-500">
+            {filtered.length} subtask · seret kartu untuk mengubah status (hanya sprint aktif)
+          </p>
+        </div>
+
+        {/* Dua konsep filter: Sprint Aktif (default) & Backlog */}
+        <div className="flex rounded-full bg-surface-2 p-1 ring-1 ring-line">
+          {(["active", "backlog"] as Scope[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-[12.5px] font-bold transition",
+                scope === s ? "bg-brand-1 text-white" : "text-ink-500 hover:text-ink-900",
+              )}
+            >
+              {s === "active" ? "Sprint Aktif" : "Backlog"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-end gap-3">
         <div className="w-44">
-          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">
-            Status
-          </span>
-          <Select value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-            <option value="all">Semua status</option>
-            {COLUMNS.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_META[s].label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div className="w-44">
-          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">
-            Prioritas
-          </span>
-          <Select
-            value={fPriority}
-            onChange={(e) => setFPriority(e.target.value)}
-          >
+          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">Prioritas task</span>
+          <Select value={fPriority} onChange={(e) => setFPriority(e.target.value)}>
             <option value="all">Semua prioritas</option>
             <option value="high">High</option>
             <option value="medium">Medium</option>
@@ -145,47 +155,43 @@ export function BucketClient() {
         </div>
       </div>
 
+      {scope === "backlog" && (
+        <div className="mt-4 rounded-lg border border-line bg-surface-2/60 px-4 py-3 text-[12.5px] font-semibold text-ink-500">
+          Task backlog belum masuk sprint aktif — belum bisa dikerjakan. Kartu hanya sebagai informasi.
+        </div>
+      )}
+
       {error && (
         <div className="mt-4">
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
-
       {tasksReq.error && (
         <div className="mt-4">
-          <ErrorNote>
-            {tasksReq.error instanceof Error
-              ? tasksReq.error.message
-              : "Gagal memuat task"}
-          </ErrorNote>
+          <ErrorNote>{tasksReq.error instanceof Error ? tasksReq.error.message : "Gagal memuat task"}</ErrorNote>
         </div>
       )}
 
       {scopeLoading || !projectId || tasksReq.isLoading ? (
         <div className="flex items-center justify-center py-24 text-ink-400">
-          <Spinner />{" "}
-          <span className="ml-3 text-sm font-semibold">Memuat task…</span>
+          <Spinner /> <span className="ml-3 text-sm font-semibold">Memuat task…</span>
         </div>
-      ) : tasks.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="mt-6 rounded-xl border border-line bg-surface py-20 text-center shadow-sm">
           <FolderKanban className="mx-auto h-8 w-8 text-ink-300" />
           <p className="mt-3 font-heading text-[16px] font-bold text-ink-900">
-            Belum ada task di project ini
+            {scope === "backlog" ? "Backlog kosong" : "Belum ada subtask di sprint aktif"}
           </p>
           <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-500">
-            Task akan muncul setelah admin membuatnya untuk project ini.
+            {scope === "backlog"
+              ? "Semua task sudah masuk sprint."
+              : "Subtask akan muncul setelah admin memasukkannya ke sprint aktif."}
           </p>
         </div>
       ) : (
-        <div
-          className={`mt-6 grid gap-4 ${
-            columns.length === 1
-              ? "grid-cols-1"
-              : "md:grid-cols-2 xl:grid-cols-4"
-          }`}
-        >
-          {columns.map((col) => {
-            const items = filtered.filter((t) => t.status === col);
+        <div className={`mt-6 grid gap-4 ${COLUMNS.length === 1 ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-4"}`}>
+          {COLUMNS.map((col) => {
+            const items = filtered.filter((c) => c.subtask.status === col);
             const isOver = overCol === col && dragId !== null;
             return (
               <section
@@ -196,7 +202,6 @@ export function BucketClient() {
                   if (overCol !== col) setOverCol(col);
                 }}
                 onDragLeave={(e) => {
-                  // hanya lepas highlight bila benar-benar keluar kolom
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                     setOverCol((c) => (c === col ? null : c));
                   }
@@ -212,9 +217,7 @@ export function BucketClient() {
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`h-2 w-2 rounded-full ${STATUS_META[col].dot}`}
-                    />
+                    <span className={`h-2 w-2 rounded-full ${STATUS_META[col].dot}`} />
                     <h2 className="font-heading text-[13.5px] font-extrabold uppercase tracking-wide text-ink-700">
                       {STATUS_META[col].label}
                     </h2>
@@ -231,23 +234,23 @@ export function BucketClient() {
                       isOver && "border-brand-1/50 bg-surface-2 text-brand-1",
                     )}
                   >
-                    {isOver ? "Lepaskan di sini" : "Tidak ada task"}
+                    {isOver ? "Lepaskan di sini" : "Tidak ada subtask"}
                   </div>
                 ) : (
-                  items.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      owned={task.assigneeId === myId}
-                      busy={busyId === task.id}
-                      draggable={canDrag(task)}
-                      dragging={dragId === task.id}
-                      onDragStart={() => setDragId(task.id)}
+                  items.map((card) => (
+                    <SubtaskCard
+                      key={card.subtask.id}
+                      card={card}
+                      owned={card.subtask.assigneeId === myId}
+                      busy={busyId === card.subtask.id}
+                      draggable={canDrag(card)}
+                      dragging={dragId === card.subtask.id}
+                      onDragStart={() => setDragId(card.subtask.id)}
                       onDragEnd={() => {
                         setDragId(null);
                         setOverCol(null);
                       }}
-                      onOpenDetail={() => setDetailId(task.id)}
+                      onOpenDetail={() => setDetailId(card.subtask.id)}
                     />
                   ))
                 )}
@@ -257,19 +260,13 @@ export function BucketClient() {
         </div>
       )}
 
-      {detailId && (
-        <TaskDetailSheet
-          taskId={detailId}
-          fallback={tasks.find((t) => t.id === detailId) ?? null}
-          onClose={() => setDetailId(null)}
-        />
-      )}
+      {detailId && <SubtaskDetailSheet subtaskId={detailId} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
 
-function TaskCard({
-  task,
+function SubtaskCard({
+  card,
   owned,
   busy,
   draggable,
@@ -278,7 +275,7 @@ function TaskCard({
   onDragEnd,
   onOpenDetail,
 }: {
-  task: TaskItem;
+  card: Card;
   owned: boolean;
   busy: boolean;
   draggable: boolean;
@@ -287,20 +284,19 @@ function TaskCard({
   onDragEnd: () => void;
   onOpenDetail: () => void;
 }) {
+  const { subtask: st, task } = card;
   return (
     <article
       draggable={draggable && !busy}
       onDragStart={(e) => {
-        e.dataTransfer.setData("text/plain", task.id);
+        e.dataTransfer.setData("text/plain", st.id);
         e.dataTransfer.effectAllowed = "move";
         onDragStart();
       }}
       onDragEnd={onDragEnd}
       className={cn(
         "rounded-md border border-line bg-surface p-4 shadow-soft transition",
-        draggable && !busy
-          ? "cursor-grab active:cursor-grabbing hover:shadow-md"
-          : "hover:shadow-md",
+        draggable && !busy ? "cursor-grab active:cursor-grabbing hover:shadow-md" : "hover:shadow-md",
         dragging && "opacity-40",
         busy && "animate-pulse",
       )}
@@ -309,25 +305,20 @@ function TaskCard({
         <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-[10.5px] font-bold text-ink-500 ring-1 ring-line">
           {task.workType.name}
         </span>
-        {task.assignee && (
-          <span className="truncate text-[11px] font-bold text-ink-500">
-            {task.assignee.name}
+        {st.assignee ? (
+          <span className="truncate text-[11px] font-bold text-ink-500">{st.assignee.name}</span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-brand-soft px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-brand-1">
+            Bisa diambil
           </span>
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={onOpenDetail}
-        className="mt-2 block w-full text-left"
-        title="Lihat detail task"
-      >
+      <button type="button" onClick={onOpenDetail} className="mt-2 block w-full text-left" title="Lihat detail subtask">
         <h3 className="line-clamp-2 text-[14px] font-bold leading-snug text-ink-900 hover:text-brand-1">
-          {task.title}
+          {st.title}
         </h3>
-        <p className="mt-0.5 truncate text-[11.5px] text-ink-400">
-          Requester: {task.requester.name}
-        </p>
+        <p className="mt-0.5 truncate text-[11.5px] text-ink-400">{task.title}</p>
       </button>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
@@ -339,26 +330,14 @@ function TaskCard({
         {task.overdue && <OverdueBadge />}
       </div>
 
-      <div className="mt-3">
-        <TaskProgress
-          loggedMinutes={task.loggedMinutes}
-          estimatedHours={task.estimatedHours}
-        />
-      </div>
-
       <div className="mt-3.5 flex items-center justify-between gap-2 border-t border-line-soft pt-3">
-        {owned &&
-          (task.status === "done" ? (
-            <span className="text-[12px] font-bold text-ink-400">Selesai</span>
-          ) : null)}
-        <div className="flex items-center gap-3">
-          <Link
-            href="/home"
-            className="inline-flex items-center gap-1 text-[12.5px] font-bold text-brand-1 hover:underline"
-          >
-            Kerjakan <ArrowRight className="h-3.5 w-3.5" />
-          </Link>
-        </div>
+        {owned && st.status === "done" && <span className="text-[12px] font-bold text-ink-400">Selesai</span>}
+        <Link
+          href="/home"
+          className="ml-auto inline-flex items-center gap-1 text-[12.5px] font-bold text-brand-1 hover:underline"
+        >
+          Kerjakan <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
     </article>
   );

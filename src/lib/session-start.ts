@@ -1,4 +1,6 @@
-// Kuro — helper bersama untuk memulai sesi kerja (clock in & switch task)
+// Kuro — helper bersama untuk memulai sesi kerja (clock in & switch).
+// Hierarki baru: sesi selalu terikat ke SUBTASK. Freelancer hanya boleh mengambil
+// subtask pada task yang berada di sprint AKTIF (backlog tidak bisa dikerjakan).
 import type { TaskStatus } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from './db'
@@ -15,19 +17,19 @@ export type StartSessionResult =
       ok: true
       entry: TimeEntryItem
       autoAssigned: boolean
-      taskStatusChanged: { from: TaskStatus; to: TaskStatus } | null
-      taskTitle: string
+      statusChanged: { from: TaskStatus; to: TaskStatus } | null
+      subtaskTitle: string
       previousEntryId?: string
     }
   | { ok: false; error: NextResponse }
 
 /**
- * Validasi + buat time entry baru (rule #1, #3, #7, #11, #12).
- * `switchFromId` diisi saat switch task → entry lama ditutup dalam transaksi yang sama (rule #8).
+ * Validasi + buat time entry baru terhadap sebuah subtask (rule #1, #3, #7, #11, #12).
+ * `switchFromId` diisi saat switch → entry lama ditutup dalam transaksi yang sama (rule #8).
  */
 export async function startSession(opts: {
   userId: string
-  taskId: string
+  subtaskId: string
   switchFromId?: string
   now?: Date
 }): Promise<StartSessionResult> {
@@ -53,36 +55,58 @@ export async function startSession(opts: {
     }
   }
 
-  const task = await db.task.findUnique({ where: { id: opts.taskId } })
-  if (!task) {
-    return { ok: false, error: NextResponse.json({ error: 'Task tidak ditemukan.' }, { status: 404 }) }
+  const subtask = await db.subtask.findUnique({
+    where: { id: opts.subtaskId },
+    include: {
+      task: {
+        include: {
+          sprint: { select: { id: true, status: true } },
+          assignees: { select: { userId: true } },
+          project: { select: { members: { select: { userId: true } } } },
+        },
+      },
+    },
+  })
+  if (!subtask) {
+    return { ok: false, error: NextResponse.json({ error: 'Subtask tidak ditemukan.' }, { status: 404 }) }
   }
 
-  // Rule #3: task Done/Dibatalkan tidak bisa dipilih
-  if (task.status === 'done' || task.status === 'cancelled') {
+  // Rule #3: Done/Dibatalkan tidak bisa dipilih
+  if (subtask.status === 'done' || subtask.status === 'cancelled') {
     return {
       ok: false,
       error: NextResponse.json(
         {
-          error: `Task sudah ${task.status === 'done' ? 'selesai' : 'dibatalkan'} — tidak bisa dipilih.`,
+          error: `Subtask sudah ${subtask.status === 'done' ? 'selesai' : 'dibatalkan'} — tidak bisa dipilih.`,
         },
         { status: 400 }
       ),
     }
   }
 
-  // Rule #12: freelancer hanya boleh mengerjakan task miliknya atau bucket bersama
-  if (task.assigneeId !== null && task.assigneeId !== opts.userId) {
+  // Freelancer hanya mengerjakan subtask di sprint AKTIF (backlog di luar scope)
+  if (!subtask.task.sprint || subtask.task.sprint.status !== 'active') {
     return {
       ok: false,
-      error: NextResponse.json({ error: 'Task ini di-assign ke freelancer lain.' }, { status: 403 }),
+      error: NextResponse.json(
+        { error: 'Task ini belum masuk sprint aktif — hubungi admin untuk memasukkannya ke sprint.' },
+        { status: 409 }
+      ),
     }
   }
 
-  // Rule #7: task unassigned → auto-assign; task To Do → In Progress
-  const autoAssigned = task.assigneeId === null
-  const nextStatus: TaskStatus | null = task.status === 'todo' ? 'in_progress' : null
-  const taskStatusChanged = nextStatus !== null ? { from: task.status, to: nextStatus } : null
+  // Rule #12: subtask milik orang lain tidak bisa diambil; unassigned boleh (bucket bersama).
+  if (subtask.assigneeId !== null && subtask.assigneeId !== opts.userId) {
+    return {
+      ok: false,
+      error: NextResponse.json({ error: 'Subtask ini di-assign ke freelancer lain.' }, { status: 403 }),
+    }
+  }
+
+  // Rule #7: subtask unassigned → auto-assign; To Do → In Progress
+  const autoAssigned = subtask.assigneeId === null
+  const nextStatus: TaskStatus | null = subtask.status === 'todo' ? 'in_progress' : null
+  const statusChanged = nextStatus !== null ? { from: subtask.status, to: nextStatus } : null
 
   try {
     const entry = await db.$transaction(async (tx) => {
@@ -94,18 +118,18 @@ export async function startSession(opts: {
         })
       }
 
-      if (autoAssigned || taskStatusChanged) {
-        await tx.task.update({
-          where: { id: task.id },
+      if (autoAssigned || statusChanged) {
+        await tx.subtask.update({
+          where: { id: subtask.id },
           data: {
             ...(autoAssigned ? { assigneeId: opts.userId } : {}),
-            ...(taskStatusChanged ? { status: taskStatusChanged.to } : {}),
+            ...(statusChanged ? { status: statusChanged.to } : {}),
           },
         })
       }
 
       return tx.timeEntry.create({
-        data: { userId: opts.userId, taskId: task.id, clockInAt: now },
+        data: { userId: opts.userId, subtaskId: subtask.id, clockInAt: now },
         include: TIME_ENTRY_INCLUDE,
       })
     }, TX_OPTIONS)
@@ -114,8 +138,8 @@ export async function startSession(opts: {
       ok: true,
       entry: mapTimeEntry(entry, now),
       autoAssigned,
-      taskStatusChanged,
-      taskTitle: task.title,
+      statusChanged,
+      subtaskTitle: subtask.title,
       previousEntryId: opts.switchFromId,
     }
   } catch (e) {

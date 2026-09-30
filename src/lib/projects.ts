@@ -9,7 +9,7 @@ export const PROJECT_INCLUDE = {
   requesters: {
     include: { requester: { select: { id: true, name: true, isActive: true } } },
   },
-  tasks: { select: { status: true, deadlineAt: true } },
+  tasks: { select: { status: true, deadlineAt: true, sprintId: true } },
 } satisfies Prisma.ProjectInclude
 
 type ProjectWithRelations = Prisma.ProjectGetPayload<{ include: typeof PROJECT_INCLUDE }>
@@ -36,6 +36,10 @@ export type ProjectItem = {
   overdue: number
   /** task belum selesai yang tenggatnya dalam 7 hari ke depan (belum lewat) */
   dueSoon: number
+  /** task di sprint aktif */
+  inActiveSprint: number
+  /** task di backlog (tanpa sprint) */
+  backlog: number
   members: ProjectMemberItem[]
   requesters: ProjectRequesterItem[]
   createdAt: string
@@ -74,6 +78,8 @@ export function mapProject(p: ProjectWithRelations, now = new Date()): ProjectIt
     },
     overdue,
     dueSoon,
+    inActiveSprint: p.tasks.filter((t) => t.sprintId !== null).length,
+    backlog: p.tasks.filter((t) => t.sprintId === null).length,
     members: p.members.map((m) => ({
       id: m.user.id,
       name: m.user.name,

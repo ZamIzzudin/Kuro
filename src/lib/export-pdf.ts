@@ -45,6 +45,7 @@ function userBlock(u: ReportUser): string {
         .map(
           (e) => `<tr>
             <td>${escapeHtml(e.taskTitle)}</td>
+            <td>${escapeHtml(e.subtaskTitle)}</td>
             <td>${escapeHtml(e.project)}</td>
             <td>${escapeHtml(e.workType)}</td>
             <td class="num">${formatWIB(e.clockInAt, 'HH.mm')}</td>
@@ -54,7 +55,7 @@ function userBlock(u: ReportUser): string {
         )
         .join('')
       return `<tr class="day-head">
-          <td colspan="6"><strong>${escapeHtml(dayLabel)}</strong> — ${formatMinutes(d.minutes)} (${d.entryCount} sesi)</td>
+          <td colspan="7"><strong>${escapeHtml(dayLabel)}</strong> — ${formatMinutes(d.minutes)} (${d.entryCount} sesi)</td>
         </tr>${taskLines}`
     })
     .join('')
@@ -86,12 +87,12 @@ function userBlock(u: ReportUser): string {
       </div>
     </header>
 
-    <h3>Rincian per Hari & Task</h3>
+    <h3>Rincian per Hari, Task & Subtask</h3>
     ${
       u.byDay.length === 0
         ? '<p class="empty">Tidak ada catatan jam kerja pada periode ini.</p>'
         : `<table>
-      <thead><tr><th>Task</th><th>Project</th><th>Jenis</th><th class="num">In</th><th class="num">Out</th><th class="num">Menit</th></tr></thead>
+      <thead><tr><th>Task</th><th>Subtask</th><th>Project</th><th>Jenis</th><th class="num">In</th><th class="num">Out</th><th class="num">Menit</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>`
     }

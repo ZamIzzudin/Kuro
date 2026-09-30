@@ -1,5 +1,5 @@
-// POST /api/time-entries/clock-in — mulai sesi kerja pada sebuah task (F2)
-// Rule #1 (wajib pilih task), #2 (1 sesi aktif), #3 (done/cancelled tak bisa dipilih),
+// POST /api/time-entries/clock-in — mulai sesi kerja pada sebuah subtask
+// Rule #1 (wajib pilih subtask), #2 (1 sesi aktif), #3 (done/cancelled tak bisa dipilih),
 // #7 (auto-assign + In Progress), #11 (periode terkunci), #12 (scope freelancer).
 import { NextResponse } from 'next/server'
 import { logActivity } from '@/lib/activity'
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const parsed = await parseJson(req, clockInSchema)
   if (parsed.error) return parsed.error
 
-  const result = await startSession({ userId: user.id, taskId: parsed.data.taskId })
+  const result = await startSession({ userId: user.id, subtaskId: parsed.data.subtaskId })
   if (!result.ok) return result.error
 
   await logActivity({
@@ -24,29 +24,29 @@ export async function POST(req: Request) {
     action: 'clock_in',
     entityType: 'time_entry',
     entityId: result.entry.id,
-    newValue: { taskId: result.entry.task.id, clockInAt: result.entry.clockInAt },
-    description: `${user.name} clock in pada task "${result.taskTitle}"`,
+    newValue: { subtaskId: result.entry.subtask.id, clockInAt: result.entry.clockInAt },
+    description: `${user.name} clock in pada subtask "${result.subtaskTitle}"`,
   })
 
   if (result.autoAssigned) {
     await logActivity({
       userId: user.id,
-      action: 'task_assigned',
-      entityType: 'task',
-      entityId: result.entry.task.id,
+      action: 'subtask_claimed',
+      entityType: 'subtask',
+      entityId: result.entry.subtask.id,
       newValue: { assigneeId: user.id },
-      description: `Task "${result.taskTitle}" auto-assign ke ${user.name} saat clock in`,
+      description: `Subtask "${result.subtaskTitle}" diklaim oleh ${user.name}`,
     })
   }
-  if (result.taskStatusChanged) {
+  if (result.statusChanged) {
     await logActivity({
       userId: user.id,
-      action: 'task_status_changed',
-      entityType: 'task',
-      entityId: result.entry.task.id,
-      oldValue: { status: result.taskStatusChanged.from },
-      newValue: { status: result.taskStatusChanged.to },
-      description: `Status task "${result.taskTitle}" otomatis berubah: ${STATUS_LABEL[result.taskStatusChanged.from]} → ${STATUS_LABEL[result.taskStatusChanged.to]}`,
+      action: 'subtask_status_changed',
+      entityType: 'subtask',
+      entityId: result.entry.subtask.id,
+      oldValue: { status: result.statusChanged.from },
+      newValue: { status: result.statusChanged.to },
+      description: `Status subtask "${result.subtaskTitle}" otomatis berubah: ${STATUS_LABEL[result.statusChanged.from]} → ${STATUS_LABEL[result.statusChanged.to]}`,
     })
   }
 
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     {
       entry: result.entry,
       autoAssigned: result.autoAssigned,
-      taskStatusChanged: result.taskStatusChanged,
+      subtaskStatusChanged: result.statusChanged,
     },
     { status: 201 }
   )

@@ -15,8 +15,20 @@ export type ActivityAction =
   | 'task_updated'
   | 'task_assigned'
   | 'task_status_changed'
+  | 'subtask_created'
+  | 'subtask_updated'
+  | 'subtask_deleted'
+  | 'subtask_claimed'
+  | 'subtask_status_changed'
+  | 'sprint_created'
+  | 'sprint_updated'
+  | 'sprint_started'
+  | 'sprint_completed'
+  | 'sprint_reopened'
+  | 'sprint_deleted'
   | 'clock_in'
   | 'clock_out'
+  | 'time_entry_backfilled'
   | 'switch_task'
   | 'time_entry_edited'
   | 'correction_submitted'
@@ -36,7 +48,7 @@ export type ActivityAction =
 type LogInput = {
   userId?: string | null
   action: ActivityAction
-  entityType?: 'user' | 'task' | 'time_entry' | 'correction' | 'period_lock' | string
+  entityType?: 'user' | 'task' | 'subtask' | 'sprint' | 'time_entry' | 'correction' | 'period_lock' | string
   entityId?: string
   oldValue?: Prisma.InputJsonValue
   newValue?: Prisma.InputJsonValue

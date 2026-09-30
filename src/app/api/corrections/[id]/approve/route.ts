@@ -13,7 +13,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   const correction = await db.correctionRequest.findUnique({
     where: { id: params.id },
     include: {
-      timeEntry: { include: { task: { select: { id: true, title: true } } } },
+      timeEntry: { include: { subtask: { select: { id: true, title: true } } } },
     },
   })
   if (!correction) return NextResponse.json({ error: 'Koreksi tidak ditemukan.' }, { status: 404 })
@@ -25,7 +25,7 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
   // null/undefined pada usulan berarti "tidak diubah"
   const nextClockIn = correction.newClockInAt ?? entry.clockInAt
   const nextClockOut = correction.newClockOutAt ?? entry.clockOutAt
-  const nextTaskId = correction.newTaskId ?? entry.taskId
+  const nextSubtaskId = correction.newSubtaskId ?? entry.subtaskId
 
   // Validasi ulang semua business rule sebelum menerapkan (RANCANGAN §4.5)
   const invalid = await validateEntryChange({
@@ -33,24 +33,24 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     entryId: entry.id,
     clockInAt: nextClockIn,
     clockOutAt: nextClockOut,
-    taskId: nextTaskId !== entry.taskId ? nextTaskId : undefined,
+    subtaskId: nextSubtaskId !== entry.subtaskId ? nextSubtaskId : undefined,
   })
   if (invalid) {
     return NextResponse.json({ error: invalid.message }, { status: invalid.status })
   }
 
   const now = new Date()
-  const taskChanged = nextTaskId !== entry.taskId
-  let newTaskTitle: string | null = null
-  if (taskChanged) {
-    const t = await db.task.findUnique({ where: { id: nextTaskId }, select: { title: true } })
-    newTaskTitle = t?.title ?? null
+  const subtaskChanged = nextSubtaskId !== entry.subtaskId
+  let newSubtaskTitle: string | null = null
+  if (subtaskChanged) {
+    const s = await db.subtask.findUnique({ where: { id: nextSubtaskId }, select: { title: true } })
+    newSubtaskTitle = s?.title ?? null
   }
 
   await db.$transaction([
     db.timeEntry.update({
       where: { id: entry.id },
-      data: { clockInAt: nextClockIn, clockOutAt: nextClockOut, taskId: nextTaskId },
+      data: { clockInAt: nextClockIn, clockOutAt: nextClockOut, subtaskId: nextSubtaskId },
     }),
     db.correctionRequest.update({
       where: { id: correction.id },
@@ -66,17 +66,17 @@ export async function POST(_req: Request, { params }: { params: { id: string } }
     oldValue: {
       clockInAt: entry.clockInAt,
       clockOutAt: entry.clockOutAt,
-      taskId: entry.taskId,
-      taskTitle: entry.task.title,
+      subtaskId: entry.subtaskId,
+      subtaskTitle: entry.subtask.title,
     },
     newValue: {
       clockInAt: nextClockIn,
       clockOutAt: nextClockOut,
-      taskId: nextTaskId,
-      taskTitle: newTaskTitle ?? entry.task.title,
+      subtaskId: nextSubtaskId,
+      subtaskTitle: newSubtaskTitle ?? entry.subtask.title,
     },
-    description: `${admin.name} menyetujui koreksi jam kerja task "${entry.task.title}"${
-      taskChanged ? ` → "${newTaskTitle}"` : ''
+    description: `${admin.name} menyetujui koreksi jam kerja subtask "${entry.subtask.title}"${
+      subtaskChanged ? ` → "${newSubtaskTitle}"` : ''
     }`,
   })
 

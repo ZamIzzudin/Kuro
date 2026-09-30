@@ -65,6 +65,25 @@ export async function createTaskAttachments(
   })
 }
 
+export async function createSubtaskAttachments(
+  tx: Prisma.TransactionClient,
+  subtaskId: string,
+  uploadedById: string,
+  items: AttachmentInput[]
+) {
+  if (!items.length) return
+  await tx.subtaskAttachment.createMany({
+    data: items.map((a) => ({
+      subtaskId,
+      uploadedById,
+      objectKey: a.objectKey,
+      fileName: a.fileName,
+      contentType: a.contentType,
+      size: a.size,
+    })),
+  })
+}
+
 export async function createTimeEntryAttachments(
   tx: Prisma.TransactionClient,
   timeEntryId: string,

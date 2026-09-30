@@ -1,22 +1,16 @@
 'use client'
 
-// Sheet detail task — menampilkan seluruh informasi task + lampiran.
-// Dipakai dari Task Bucket (freelancer) dan daftar task admin.
+// Sheet detail TASK — level "cerita": metadata bisnis, brief/lampiran, daftar assignee,
+// dan daftar subtask (unit kerja). Dipakai dari daftar task admin.
 import useSWR from 'swr'
-import {
-  CalendarDays,
-  Clock,
-  FileText,
-  FolderKanban,
-  User,
-  UserCheck,
-} from 'lucide-react'
+import { CalendarDays, Clock, FileText, FolderKanban, Layers, User, UserCheck } from 'lucide-react'
 import { Sheet } from '@/components/sheet'
 import { ErrorNote, Spinner } from '@/components/ui'
 import { AttachmentList, formatBytes } from '@/components/attachment'
 import { OverdueBadge, PriorityBadge, StatusPill, TaskProgress } from '@/components/task-bits'
+import { Markdown } from '@/components/markdown'
 import { fetcher } from '@/lib/client'
-import { formatWIB, formatMinutes } from '@/lib/time'
+import { formatMinutes, formatWIB } from '@/lib/time'
 import type { TaskItem } from '@/lib/tasks'
 
 export function TaskDetailSheet({
@@ -29,10 +23,7 @@ export function TaskDetailSheet({
   fallback?: TaskItem | null
   onClose: () => void
 }) {
-  const { data, isLoading, error } = useSWR<{ task: TaskItem }>(
-    `/api/tasks/${taskId}`,
-    fetcher
-  )
+  const { data, isLoading, error } = useSWR<{ task: TaskItem }>(`/api/tasks/${taskId}`, fetcher)
   const task = data?.task ?? fallback ?? null
 
   return (
@@ -51,9 +42,18 @@ export function TaskDetailSheet({
             <StatusPill status={task.status} />
             <PriorityBadge priority={task.priority} />
             {task.overdue && <OverdueBadge />}
-            {!task.assignee && (
+            {task.sprint ? (
               <span className="rounded-full bg-brand-soft px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
-                Bucket Bersama
+                {task.sprint.name}
+              </span>
+            ) : (
+              <span className="rounded-full bg-surface-2 px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide text-ink-500 ring-1 ring-line">
+                Backlog
+              </span>
+            )}
+            {task.beyondSprint && (
+              <span className="rounded-full bg-pri-mediumbg px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide text-status-review">
+                Deadline lewat sprint
               </span>
             )}
           </div>
@@ -69,7 +69,7 @@ export function TaskDetailSheet({
               {task.requester.name}
             </InfoRow>
             <InfoRow icon={<UserCheck className="h-3.5 w-3.5" />} label="Assignee">
-              {task.assignee?.name ?? 'Belum di-assign'}
+              {task.assignees.length === 0 ? 'Belum di-assign' : task.assignees.map((a) => a.name).join(', ')}
             </InfoRow>
             <InfoRow icon={<CalendarDays className="h-3.5 w-3.5" />} label="Tenggat">
               {formatWIB(task.deadlineAt, 'dd MMM yyyy, HH.mm')}
@@ -80,9 +80,7 @@ export function TaskDetailSheet({
           </dl>
 
           <div>
-            <h4 className="mb-2 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">
-              Progres Waktu
-            </h4>
+            <h4 className="mb-2 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">Progres Waktu</h4>
             <TaskProgress loggedMinutes={task.loggedMinutes} estimatedHours={task.estimatedHours} />
             <p className="mt-1.5 text-[12px] text-ink-400">
               Total tercatat: {formatMinutes(task.loggedMinutes)}
@@ -92,18 +90,38 @@ export function TaskDetailSheet({
 
           {task.description && (
             <div>
-              <h4 className="mb-2 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">
-                Deskripsi
-              </h4>
-              <p className="whitespace-pre-wrap rounded-lg bg-surface-2/60 px-4 py-3 text-[13.5px] leading-relaxed text-ink-700">
-                {task.description}
-              </p>
+              <h4 className="mb-2 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">Deskripsi</h4>
+              <div className="rounded-lg bg-surface-2/60 px-4 py-3">
+                <Markdown>{task.description}</Markdown>
+              </div>
             </div>
           )}
 
           <div>
             <h4 className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">
-              Lampiran
+              <Layers className="h-3.5 w-3.5" /> Subtask
+              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold normal-case tracking-normal text-ink-500 ring-1 ring-line">
+                {task.subtaskProgress.done}/{task.subtaskProgress.total} selesai
+              </span>
+            </h4>
+            <ul className="divide-y divide-line-soft rounded-lg border border-line bg-surface">
+              {task.subtasks.map((s) => (
+                <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-[13.5px] font-bold text-ink-900">{s.title}</p>
+                    <p className="mt-0.5 truncate text-[12px] text-ink-500">
+                      {s.assignee?.name ?? 'Belum di-assign'} · {formatMinutes(s.loggedMinutes)} tercatat
+                    </p>
+                  </div>
+                  <StatusPill status={s.status} />
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">
+              Lampiran Brief
               {task.attachments.length > 0 && (
                 <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold normal-case tracking-normal text-ink-500 ring-1 ring-line">
                   {task.attachments.length}
@@ -112,7 +130,7 @@ export function TaskDetailSheet({
             </h4>
             {task.attachments.length === 0 ? (
               <p className="rounded-lg border border-dashed border-line px-4 py-6 text-center text-[12.5px] font-semibold text-ink-400">
-                Belum ada lampiran pada task ini.
+                Belum ada lampiran brief pada task ini.
               </p>
             ) : (
               <>
@@ -139,12 +157,10 @@ export function TaskDetailSheet({
                   </div>
                 )}
                 <AttachmentList items={task.attachments.filter((a) => !a.isImage)} />
-                {task.attachments.length > 0 && (
-                  <p className="mt-2 text-[11.5px] text-ink-400">
-                    Total {task.attachments.length} lampiran ·{' '}
-                    {formatBytes(task.attachments.reduce((s, a) => s + a.size, 0))}
-                  </p>
-                )}
+                <p className="mt-2 text-[11.5px] text-ink-400">
+                  Total {task.attachments.length} lampiran ·{' '}
+                  {formatBytes(task.attachments.reduce((s, a) => s + a.size, 0))}
+                </p>
               </>
             )}
           </div>

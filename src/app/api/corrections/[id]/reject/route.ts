@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const correction = await db.correctionRequest.findUnique({
     where: { id: params.id },
     include: {
-      timeEntry: { include: { task: { select: { title: true } } } },
+      timeEntry: { include: { subtask: { select: { title: true } } } },
       requestedBy: { select: { name: true } },
     },
   })
@@ -39,7 +39,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     entityId: correction.id,
     oldValue: { status: 'pending' },
     newValue: { status: 'rejected', reviewNote },
-    description: `${admin.name} menolak koreksi ${correction.requestedBy.name} pada task "${correction.timeEntry.task.title}" — ${reviewNote}`,
+    description: `${admin.name} menolak koreksi ${correction.requestedBy.name} pada subtask "${correction.timeEntry.subtask.title}" — ${reviewNote}`,
   })
 
   return NextResponse.json({ ok: true, status: 'rejected' })

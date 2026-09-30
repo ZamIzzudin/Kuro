@@ -1,5 +1,5 @@
 // GET /api/time-entries — riwayat time entry (rule #12: freelancer hanya miliknya; admin semua)
-// Filter: from/to (yyyy-MM-dd, WIB), taskId, userId (admin saja), active=true
+// Filter: from/to (yyyy-MM-dd, WIB), subtaskId, userId (admin saja), active=true
 import type { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -22,8 +22,8 @@ export async function GET(req: Request) {
     if (userId && userId !== 'all') where.userId = userId
   }
 
-  const taskId = sp.get('taskId')
-  if (taskId) where.taskId = taskId
+  const subtaskId = sp.get('subtaskId')
+  if (subtaskId) where.subtaskId = subtaskId
 
   if (sp.get('active') === 'true') where.clockOutAt = null
 

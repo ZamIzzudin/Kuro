@@ -16,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const parsed = await parseJson(req, timeEntryEditSchema)
   if (parsed.error) return parsed.error
-  const { clockInLocal, clockOutLocal, taskId, note, reason } = parsed.data
+  const { clockInLocal, clockOutLocal, subtaskId, note, reason } = parsed.data
 
   const before = await db.timeEntry.findUnique({
     where: { id: params.id },
@@ -31,14 +31,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       : clockOutLocal === null
         ? null
         : wibLocalToDate(clockOutLocal)
-  const nextTaskId = taskId ?? before.taskId
+  const nextSubtaskId = subtaskId ?? before.subtaskId
 
   const invalid = await validateEntryChange({
     userId: before.userId,
     entryId: before.id,
     clockInAt: nextClockIn,
     clockOutAt: nextClockOut,
-    taskId: nextTaskId !== before.taskId ? nextTaskId : undefined,
+    subtaskId: nextSubtaskId !== before.subtaskId ? nextSubtaskId : undefined,
   })
   if (invalid) {
     return NextResponse.json({ error: invalid.message }, { status: invalid.status })
@@ -49,7 +49,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     data: {
       clockInAt: nextClockIn,
       clockOutAt: nextClockOut,
-      taskId: nextTaskId,
+      subtaskId: nextSubtaskId,
       ...(note !== undefined ? { note: note || null } : {}),
     },
     include: TIME_ENTRY_INCLUDE,
@@ -63,18 +63,18 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     oldValue: {
       clockInAt: before.clockInAt,
       clockOutAt: before.clockOutAt,
-      taskId: before.taskId,
-      taskTitle: before.task.title,
+      subtaskId: before.subtaskId,
+      subtaskTitle: before.subtask.title,
       note: before.note,
     },
     newValue: {
       clockInAt: updated.clockInAt,
       clockOutAt: updated.clockOutAt,
-      taskId: updated.taskId,
-      taskTitle: updated.task.title,
+      subtaskId: updated.subtaskId,
+      subtaskTitle: updated.subtask.title,
       note: updated.note,
     },
-    description: `${admin.name} mengedit langsung time entry task "${before.task.title}" — alasan: ${reason}`,
+    description: `${admin.name} mengedit langsung time entry subtask "${before.subtask.title}" — alasan: ${reason}`,
   })
 
   return NextResponse.json({ entry: mapTimeEntry(updated) })

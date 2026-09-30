@@ -94,7 +94,8 @@ export async function buildReportXlsx(report: ReportResponse): Promise<Buffer> {
   const detail = addSheet(wb, 'Rincian', `Rincian Harian & Per Task — ${label}`, [
     { header: 'Freelancer', width: 22 },
     { header: 'Tanggal', width: 14 },
-    { header: 'Task', width: 34 },
+    { header: 'Task', width: 30 },
+    { header: 'Subtask', width: 30 },
     { header: 'Project', width: 22 },
     { header: 'Jenis Pekerjaan', width: 20 },
     { header: 'Requester', width: 20 },
@@ -110,6 +111,7 @@ export async function buildReportXlsx(report: ReportResponse): Promise<Buffer> {
         u.name,
         formatWIB(e.clockInAt, 'dd MMM yyyy'),
         e.taskTitle,
+        e.subtaskTitle,
         e.project,
         e.workType,
         e.requester,

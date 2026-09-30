@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         include: {
           members: { include: { user: { select: { id: true, name: true, email: true, isActive: true } } } },
           requesters: { include: { requester: { select: { id: true, name: true, isActive: true } } } },
-          tasks: { select: { status: true, deadlineAt: true } },
+          tasks: { select: { status: true, deadlineAt: true, sprintId: true } },
         },
       })
     }, TX_OPTIONS)

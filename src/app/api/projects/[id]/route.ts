@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   }
   if (user.role === 'freelancer' && !project.members.some((m) => m.user.id === user.id)) {
     // Izinkan bila freelancer punya task di project ini (konsisten dgn dropdown)
-    const hasTask = await db.task.count({ where: { projectId: params.id, assigneeId: user.id } })
+    const hasTask = await db.task.count({ where: { projectId: params.id, assignees: { some: { userId: user.id } } } })
     if (!hasTask) return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
   }
 
@@ -68,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         include: {
           members: { include: { user: { select: { id: true, name: true, email: true, isActive: true } } } },
           requesters: { include: { requester: { select: { id: true, name: true, isActive: true } } } },
-          tasks: { select: { status: true, deadlineAt: true } },
+          tasks: { select: { status: true, deadlineAt: true, sprintId: true } },
         },
       })
     }, TX_OPTIONS)
@@ -129,20 +129,25 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     )
   }
 
-  // Kumpulkan objek MinIO yang harus dibersihkan (banner + semua lampiran).
-  const [taskAttachments, entryAttachments] = await Promise.all([
+  // Kumpulkan objek MinIO yang harus dibersihkan (banner + semua lampiran task/subtask/entry).
+  const [taskAttachments, subtaskAttachments, entryAttachments] = await Promise.all([
     db.taskAttachment.findMany({
       where: { task: { projectId: params.id } },
       select: { objectKey: true },
     }),
+    db.subtaskAttachment.findMany({
+      where: { subtask: { task: { projectId: params.id } } },
+      select: { objectKey: true },
+    }),
     db.timeEntryAttachment.findMany({
-      where: { timeEntry: { task: { projectId: params.id } } },
+      where: { timeEntry: { subtask: { task: { projectId: params.id } } } },
       select: { objectKey: true },
     }),
   ])
   const objectKeys = [
     ...(project.bannerKey ? [project.bannerKey] : []),
     ...taskAttachments.map((a) => a.objectKey),
+    ...subtaskAttachments.map((a) => a.objectKey),
     ...entryAttachments.map((a) => a.objectKey),
   ]
 
@@ -150,17 +155,21 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     where: { projectId: params.id },
     select: { id: true },
   })
+  const taskIdList = taskIds.map((t) => t.id)
 
   await db.$transaction(async (tx) => {
-    // Koreksi → TimeEntry → Task (TaskAttachment ikut cascade) → Project
-    // (ProjectMember & ProjectRequester ikut cascade).
+    // Koreksi → TimeEntry → Subtask → Task → Sprint → Project
+    // (TaskAssignee/TaskAttachment/TaskSprintHistory ikut cascade saat Task dihapus,
+    //  SubtaskAttachment ikut cascade saat Subtask dihapus.)
     await tx.correctionRequest.deleteMany({
-      where: { timeEntry: { task: { projectId: params.id } } },
+      where: { timeEntry: { subtask: { task: { projectId: params.id } } } },
     })
-    await tx.timeEntry.deleteMany({ where: { task: { projectId: params.id } } })
-    if (taskIds.length) {
+    await tx.timeEntry.deleteMany({ where: { subtask: { task: { projectId: params.id } } } })
+    if (taskIdList.length) {
+      await tx.subtask.deleteMany({ where: { taskId: { in: taskIdList } } })
       await tx.task.deleteMany({ where: { projectId: params.id } })
     }
+    await tx.sprint.deleteMany({ where: { projectId: params.id } })
     await tx.project.delete({ where: { id: params.id } })
   }, TX_OPTIONS)
 

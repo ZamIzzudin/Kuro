@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ArrowLeft, Ban, Eye, Pencil, Plus } from "lucide-react";
+import { ArrowLeft, Ban, Eye, Layers, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import type { Priority, TaskStatus } from "@prisma/client";
 import {
   Button,
@@ -13,7 +13,6 @@ import {
   Input,
   Select,
   Spinner,
-  Textarea,
   Tooltip,
 } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
@@ -24,6 +23,7 @@ import {
   type PendingAttachment,
 } from "@/components/attachment";
 import { TaskDetailSheet } from "@/components/task-detail";
+import { MarkdownEditor } from "@/components/markdown-editor";
 import {
   OverdueBadge,
   PriorityBadge,
@@ -33,6 +33,7 @@ import {
 import { apiSend, fetcher } from "@/lib/client";
 import { dateToWibLocal, formatDateWIB, todayWibDate } from "@/lib/time";
 import type { TaskItem } from "@/lib/tasks";
+import type { SprintItem } from "@/lib/sprints";
 import type { ProjectItem } from "@/lib/projects";
 
 type MasterOption = { id: string; name: string; isActive: boolean };
@@ -42,6 +43,22 @@ type UserRow = {
   role: "admin" | "freelancer";
   isActive: boolean;
 };
+
+/** Baris subtask di dalam form (id ada = subtask lama). */
+type SubtaskDraft = {
+  id?: string;
+  title: string;
+  description: string;
+  assigneeId: string;
+  estimatedHours: string;
+};
+
+const emptySubtask = (): SubtaskDraft => ({
+  title: "",
+  description: "",
+  assigneeId: "",
+  estimatedHours: "",
+});
 
 export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
   const tasksReq = useSWR<{ tasks: TaskItem[] }>(
@@ -57,6 +74,10 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
     "/api/requesters",
     fetcher,
   );
+  const sprintsReq = useSWR<{ sprints: SprintItem[] }>(
+    `/api/sprints?projectId=${projectId}`,
+    fetcher,
+  );
   const projectReq = useSWR<{ project: ProjectItem }>(
     `/api/projects/${projectId}`,
     fetcher,
@@ -64,6 +85,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
 
   const [q, setQ] = useState("");
   const [fStatus, setFStatus] = useState("all");
+  const [fSprint, setFSprint] = useState("all");
   const [fAssignee, setFAssignee] = useState("all");
   const [fRequester, setFRequester] = useState("all");
   const [formTarget, setFormTarget] = useState<TaskItem | "create" | null>(
@@ -74,13 +96,12 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
   const [rowError, setRowError] = useState<string | null>(null);
 
   const tasks = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data]);
+  const sprints = useMemo(() => sprintsReq.data?.sprints ?? [], [sprintsReq.data]);
   const freelancers = (usersReq.data?.users ?? []).filter(
     (u) => u.role === "freelancer",
   );
   const workTypes = workTypesReq.data?.items ?? [];
   const project = projectReq.data?.project ?? null;
-  // Requester dibatasi pada yang terikat ke project; bila project belum punya,
-  // tampilkan semua requester aktif agar task tetap bisa dibuat.
   const requesters = useMemo(() => {
     const all = requestersReq.data?.items ?? [];
     if (!project || project.requesters.length === 0) return all;
@@ -95,11 +116,13 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
       (q.trim() === "" ||
         t.title.toLowerCase().includes(q.trim().toLowerCase())) &&
       (fStatus === "all" || t.status === fStatus) &&
+      (fSprint === "all" ||
+        (fSprint === "backlog" ? t.sprintId === null : t.sprintId === fSprint)) &&
       (fRequester === "all" || t.requesterId === fRequester) &&
       (fAssignee === "all" ||
         (fAssignee === "unassigned"
-          ? t.assigneeId === null
-          : t.assigneeId === fAssignee)),
+          ? t.assignees.length === 0
+          : t.assignees.some((a) => a.id === fAssignee))),
   );
 
   const loadError =
@@ -107,7 +130,8 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
     usersReq.error ||
     workTypesReq.error ||
     requestersReq.error ||
-    projectReq.error;
+    projectReq.error ||
+    sprintsReq.error;
   const canCreate =
     !workTypesReq.isLoading && workTypes.length > 0 && requesters.length > 0;
 
@@ -146,7 +170,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
               {projectName ?? "Memuat project…"}
             </h1>
             <p className="mt-1 text-sm text-ink-500">
-              {tasks.length} task di project ini
+              {tasks.length} task · {sprints.length} sprint
               {project && project.requesters.length > 0 && (
                 <>
                   {" "}
@@ -157,9 +181,17 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
             </p>
           </div>
         </div>
-        <Button onClick={() => setFormTarget("create")} disabled={!canCreate}>
-          <Plus className="h-4 w-4" strokeWidth={2.4} /> Buat Task
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/admin/sprints?projectId=${projectId}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-2 text-[12.5px] font-bold text-ink-700 transition hover:bg-surface-2"
+          >
+            <Layers className="h-4 w-4" /> Kelola Sprint
+          </Link>
+          <Button onClick={() => setFormTarget("create")} disabled={!canCreate}>
+            <Plus className="h-4 w-4" strokeWidth={2.4} /> Buat Task
+          </Button>
+        </div>
       </div>
 
       {loadError && (
@@ -172,46 +204,10 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
         </div>
       )}
 
-      {!workTypesReq.isLoading && workTypes.length === 0 && (
-        <div className="mb-4">
-          <ErrorNote>
-            Belum ada jenis pekerjaan aktif. Tambahkan dulu di{" "}
-            <Link href="/admin/masters" className="underline">
-              Master → Jenis Pekerjaan
-            </Link>
-            .
-          </ErrorNote>
-        </div>
-      )}
-
-      {!requestersReq.isLoading && requesters.length === 0 && (
-        <div className="mb-4">
-          <ErrorNote>
-            {project && project.requesters.length === 0 ? (
-              <>
-                Project ini belum punya requester. Tambahkan requester pada{" "}
-                <Link href="/admin/projects" className="underline">
-                  halaman Project
-                </Link>
-                , atau daftarkan requester baru di Master → Requester.
-              </>
-            ) : (
-              <>
-                Belum ada requester aktif. Tambahkan dulu di{" "}
-                <Link href="/admin/masters" className="underline">
-                  Master → Requester
-                </Link>
-                .
-              </>
-            )}
-          </ErrorNote>
-        </div>
-      )}
-
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <div className="w-56">
           <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">
-            Cari judul
+            Cari judul / subtask
           </span>
           <Input
             value={q}
@@ -236,6 +232,20 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
             ).map((s) => (
               <option key={s} value={s}>
                 {STATUS_META[s].label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="w-48">
+          <span className="mb-1.5 block text-[12.5px] font-bold text-ink-500">
+            Sprint
+          </span>
+          <Select value={fSprint} onChange={(e) => setFSprint(e.target.value)}>
+            <option value="all">Semua sprint</option>
+            <option value="backlog">Backlog</option>
+            {sprints.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} ({s.status})
               </option>
             ))}
           </Select>
@@ -299,13 +309,14 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
             </p>
           </div>
         ) : (
-          <table className="w-full min-w-[760px] text-sm">
+          <table className="w-full min-w-[880px] text-sm">
             <thead>
               <tr className="bg-surface-2/60 text-left text-[11px] font-bold uppercase tracking-wider text-ink-400">
                 <th className="px-5 py-3">Task</th>
+                <th className="px-5 py-3">Sprint</th>
+                <th className="px-5 py-3">Subtask</th>
                 <th className="px-5 py-3">Assignee</th>
                 <th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Prioritas</th>
                 <th className="px-5 py-3">Tenggat</th>
                 <th className="px-5 py-3 text-right">Aksi</th>
               </tr>
@@ -318,29 +329,40 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                 >
                   <td className="px-5 py-3.5">
                     <Tooltip label={t.title} side="top" wrap className="max-w-full">
-                      <span className="block max-w-[260px] truncate font-bold text-ink-900">
+                      <span className="block max-w-[240px] truncate font-bold text-ink-900">
                         {t.title}
                       </span>
                     </Tooltip>
-                    <p className="mt-0.5 truncate text-[12.5px] text-ink-500">
-                      {t.workType.name}
-                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[12.5px] text-ink-500">
+                      <PriorityBadge priority={t.priority} />
+                      <span>{t.workType.name}</span>
+                    </div>
                   </td>
                   <td className="px-5 py-3.5">
-                    {t.assignee ? (
-                      <span className="text-ink-700">
-                        {t.assignee.name}
-                        {freelancers.find(
-                          (u) => u.id === t.assigneeId && !u.isActive,
-                        ) && (
-                          <span className="ml-1 text-[11.5px] text-ink-400">
-                            (nonaktif)
-                          </span>
-                        )}
+                    {t.sprint ? (
+                      <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-bold text-brand-1">
+                        {t.sprint.name}
                       </span>
                     ) : (
                       <span className="text-[12.5px] font-semibold text-ink-400">
+                        Backlog
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-ink-700">
+                      <Layers className="h-3.5 w-3.5 text-ink-400" />
+                      {t.subtaskProgress.done}/{t.subtaskProgress.total} selesai
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {t.assignees.length === 0 ? (
+                      <span className="text-[12.5px] font-semibold text-ink-400">
                         Belum di-assign
+                      </span>
+                    ) : (
+                      <span className="text-ink-700">
+                        {t.assignees.map((a) => a.name).join(", ")}
                       </span>
                     )}
                   </td>
@@ -348,12 +370,14 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                     <StatusPill status={t.status} />
                   </td>
                   <td className="px-5 py-3.5">
-                    <PriorityBadge priority={t.priority} />
-                  </td>
-                  <td className="px-5 py-3.5">
                     <span className="inline-flex flex-wrap items-center gap-1.5 text-[13px] text-ink-700">
                       {formatDateWIB(t.deadlineAt)}
                       {t.overdue && <OverdueBadge />}
+                      {t.beyondSprint && (
+                        <span className="rounded-full bg-pri-mediumbg px-2 py-0.5 text-[10.5px] font-bold text-status-review">
+                          lewat sprint
+                        </span>
+                      )}
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
@@ -398,6 +422,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
             requesters,
             allRequesters,
           )}
+          sprints={sprints}
           onClose={() => setFormTarget(null)}
           onDone={() => tasksReq.mutate()}
         />
@@ -427,8 +452,6 @@ function requesterOptionsFor(
   allRequesters: MasterOption[],
 ): MasterOption[] {
   const active = projectRequesters.filter((r) => r.isActive);
-  // Bila task lama memakai requester yang sudah tidak aktif / tidak lagi terikat
-  // ke project, tetap sertakan agar tidak ikut berubah saat menyimpan.
   if (task && !active.some((r) => r.id === task.requesterId)) {
     const extra = allRequesters.find((r) => r.id === task.requesterId);
     if (extra) return [...active, extra];
@@ -443,6 +466,7 @@ function TaskFormSheet({
   freelancers,
   workTypes,
   requesters,
+  sprints,
   onClose,
   onDone,
 }: {
@@ -452,6 +476,7 @@ function TaskFormSheet({
   freelancers: UserRow[];
   workTypes: MasterOption[];
   requesters: MasterOption[];
+  sprints: SprintItem[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -463,7 +488,10 @@ function TaskFormSheet({
   const [requesterId, setRequesterId] = useState(
     initial?.requesterId ?? requesters[0]?.id ?? "",
   );
-  const [assigneeId, setAssigneeId] = useState(initial?.assigneeId ?? "");
+  const [sprintId, setSprintId] = useState(initial?.sprintId ?? "");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(
+    initial?.assignees.map((a) => a.id) ?? [],
+  );
   const [priority, setPriority] = useState<Priority>(
     initial?.priority ?? "medium",
   );
@@ -479,6 +507,17 @@ function TaskFormSheet({
   const [status, setStatus] = useState<TaskStatus>(initial?.status ?? "todo");
   const [newFiles, setNewFiles] = useState<PendingAttachment[]>([]);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [subtasks, setSubtasks] = useState<SubtaskDraft[]>(
+    initial
+      ? initial.subtasks.map((s) => ({
+          id: s.id,
+          title: s.title,
+          description: s.description ?? "",
+          assigneeId: s.assigneeId ?? "",
+          estimatedHours: s.estimatedHours != null ? String(s.estimatedHours) : "",
+        }))
+      : [emptySubtask()],
+  );
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -486,24 +525,56 @@ function TaskFormSheet({
   const storedAttachments = (initial?.attachments ?? []).filter(
     (a) => !removedIds.includes(a.id),
   );
+  const activeFreelancers = freelancers.filter((u) => u.isActive);
+
+  function toggleAssignee(id: string) {
+    setAssigneeIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function updateSubtask(i: number, patch: Partial<SubtaskDraft>) {
+    setSubtasks((prev) =>
+      prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)),
+    );
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setSaving(true);
     setError(null);
+
+    const cleanSubtasks = subtasks
+      .filter((s) => s.title.trim() !== "")
+      .map((s, idx) => ({
+        ...(s.id ? { id: s.id } : {}),
+        title: s.title.trim(),
+        description: s.description.trim() || null,
+        assigneeId: s.assigneeId || null,
+        estimatedHours:
+          s.estimatedHours.trim() === "" ? null : Number(s.estimatedHours),
+        position: idx,
+      }));
+    if (cleanSubtasks.length === 0) {
+      setError("Minimal satu subtask harus punya judul.");
+      return;
+    }
+
+    setSaving(true);
     const attachments = toAttachmentPayload(newFiles);
     const payload: Record<string, unknown> = {
       title: title.trim(),
       description: description.trim() || null,
       projectId,
+      sprintId: sprintId || null,
       workTypeId,
       requesterId,
-      assigneeId: assigneeId || null,
+      assigneeIds,
       priority,
       estimatedHours:
         estimatedHours.trim() === "" ? null : Number(estimatedHours),
       requestDateLocal,
       deadlineLocal,
+      subtasks: cleanSubtasks,
       ...(isEdit ? { status } : {}),
       ...(isEdit
         ? { addAttachments: attachments, removeAttachmentIds: removedIds }
@@ -547,13 +618,12 @@ function TaskFormSheet({
         </div>
 
         <div>
-          <FieldLabel htmlFor="t-desc">Deskripsi (opsional)</FieldLabel>
-          <Textarea
+          <FieldLabel>Deskripsi (Markdown, opsional)</FieldLabel>
+          <MarkdownEditor
             id="t-desc"
             value={description}
-            maxLength={2000}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Detail brief, link referensi, dll."
+            onChange={setDescription}
+            placeholder="Detail brief, link referensi, bullet list, dll."
           />
         </div>
 
@@ -595,20 +665,18 @@ function TaskFormSheet({
             </Select>
           </div>
           <div>
-            <FieldLabel htmlFor="t-assignee">Assignee</FieldLabel>
+            <FieldLabel htmlFor="t-sprint">Sprint</FieldLabel>
             <Select
-              id="t-assignee"
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
+              id="t-sprint"
+              value={sprintId}
+              onChange={(e) => setSprintId(e.target.value)}
             >
-              <option value="">Belum di-assign (bucket bersama)</option>
-              {freelancers
-                .filter((u) => u.isActive)
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
+              <option value="">Backlog (di luar sprint)</option>
+              {sprints.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {s.status}
+                </option>
+              ))}
             </Select>
           </div>
           <div>
@@ -684,8 +752,130 @@ function TaskFormSheet({
           )}
         </div>
 
+        <div>
+          <FieldLabel>
+            <span className="inline-flex items-center gap-1.5">
+              <UserPlus className="h-3.5 w-3.5" /> Assignee (boleh lebih dari
+              satu)
+            </span>
+          </FieldLabel>
+          <div className="flex flex-wrap gap-2 rounded-md border border-line bg-surface p-3">
+            {activeFreelancers.length === 0 && (
+              <span className="text-[12.5px] font-semibold text-ink-400">
+                Belum ada freelancer aktif.
+              </span>
+            )}
+            {activeFreelancers.map((u) => {
+              const on = assigneeIds.includes(u.id);
+              return (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => toggleAssignee(u.id)}
+                  className={`rounded-full px-3 py-1.5 text-[12.5px] font-bold transition ${
+                    on
+                      ? "bg-brand-1 text-white"
+                      : "bg-surface-2 text-ink-500 ring-1 ring-line hover:text-ink-900"
+                  }`}
+                >
+                  {u.name}
+                </button>
+              );
+            })}
+          </div>
+          <p className="mt-1.5 text-[12px] text-ink-400">
+            Subask tanpa assignee bisa diambil siapa pun di project ini (bucket
+            bersama).
+          </p>
+        </div>
+
         <div className="border-t border-line-soft pt-4">
-          <FieldLabel>Lampiran</FieldLabel>
+          <div className="mb-2 flex items-center justify-between">
+            <FieldLabel>
+              <span className="inline-flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5" /> Subtask (unit kerja)
+              </span>
+            </FieldLabel>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => setSubtasks((p) => [...p, emptySubtask()])}
+            >
+              <Plus className="h-3.5 w-3.5" /> Tambah
+            </Button>
+          </div>
+          <div className="space-y-3">
+            {subtasks.map((s, i) => (
+              <div
+                key={s.id ?? `new-${i}`}
+                className="rounded-md border border-line bg-surface-2/40 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="mt-2 text-[12px] font-bold text-ink-400">
+                    #{i + 1}
+                  </span>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Input
+                      value={s.title}
+                      maxLength={150}
+                      placeholder="Judul subtask"
+                      onChange={(e) =>
+                        updateSubtask(i, { title: e.target.value })
+                      }
+                    />
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Select
+                        value={s.assigneeId}
+                        onChange={(e) =>
+                          updateSubtask(i, { assigneeId: e.target.value })
+                        }
+                      >
+                        <option value="">Assignee: belum ditentukan</option>
+                        {activeFreelancers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
+                      </Select>
+                      <Input
+                        type="number"
+                        min={0.5}
+                        max={500}
+                        step={0.5}
+                        value={s.estimatedHours}
+                        placeholder="Estimasi (jam)"
+                        onChange={(e) =>
+                          updateSubtask(i, { estimatedHours: e.target.value })
+                        }
+                      />
+                    </div>
+                    <MarkdownEditor
+                      value={s.description}
+                      onChange={(v) => updateSubtask(i, { description: v })}
+                      placeholder="Detail teknis subtask (Markdown, opsional)"
+                      rows={3}
+                      label="Deskripsi subtask"
+                    />
+                  </div>
+                  {subtasks.length > 1 && (
+                    <IconButton
+                      label="Hapus subtask"
+                      variant="danger"
+                      icon={<Trash2 className="h-4 w-4" />}
+                      onClick={() =>
+                        setSubtasks((p) => p.filter((_, idx) => idx !== i))
+                      }
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-line-soft pt-4">
+          <FieldLabel>Lampiran Brief</FieldLabel>
           {isEdit && storedAttachments.length > 0 && (
             <div className="mb-3">
               <p className="mb-1.5 text-[11.5px] font-bold uppercase tracking-wide text-ink-400">
@@ -697,7 +887,11 @@ function TaskFormSheet({
               />
             </div>
           )}
-          <AttachmentPicker files={newFiles} onChange={setNewFiles} disabled={saving} />
+          <AttachmentPicker
+            files={newFiles}
+            onChange={setNewFiles}
+            disabled={saving}
+          />
         </div>
 
         {error && <ErrorNote>{error}</ErrorNote>}
@@ -750,8 +944,8 @@ function CancelSheet({
       <div className="space-y-4">
         <p className="text-sm text-ink-700">
           Yakin membatalkan <span className="font-bold">“{task?.title}”</span>?
-          Status akan menjadi <span className="font-bold">Dibatalkan</span> dan
-          tidak bisa dipilih untuk clock in.
+          Semua subtask akan menjadi <span className="font-bold">Dibatalkan</span>{" "}
+          dan tidak bisa dipilih untuk clock in.
         </p>
         {error && <ErrorNote>{error}</ErrorNote>}
         <div className="flex justify-end gap-2">

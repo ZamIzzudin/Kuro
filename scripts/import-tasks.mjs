@@ -28,7 +28,8 @@ if (existsSync(envPath)) {
 const TZ = 'Asia/Jakarta'
 const FIRST_DATA_ROW = 4
 const MAX_TITLE = 120
-const MAX_DESC = 2000
+// - Deskripsi task memakai batas 20.000 karakter (Markdown).
+const MAX_DESC = 20_000
 const STATUSES = ['todo', 'in_progress', 'review', 'done', 'cancelled']
 const PRIORITIES = ['low', 'medium', 'high']
 
@@ -324,15 +325,28 @@ async function main() {
             title: r.title,
             description: r.description,
             projectId: r.projectId,
+            // Impor massal selalu masuk Backlog; masukkan ke sprint lewat UI.
+            sprintId: null,
             workTypeId: r.workTypeId,
             requesterId: r.requesterId,
-            assigneeId: r.assigneeId,
             priority: r.priority,
             estimatedHours: r.estimatedHours,
             requestDate: new Date(`${r.requestDate}T00:00:00.000Z`),
             deadlineAt: r.deadlineAt,
             status: r.status,
             createdById: admin.id,
+            ...(r.assigneeId ? { assignees: { create: [{ userId: r.assigneeId }] } } : {}),
+            // Hierarki baru: setiap task wajib punya minimal satu subtask.
+            // Karena Excel hanya punya satu judul, buat satu subtask bernama sama.
+            subtasks: {
+              create: [
+                {
+                  title: r.title.slice(0, 150),
+                  assigneeId: r.assigneeId,
+                  position: 0,
+                },
+              ],
+            },
           },
         })
         await tx.activityLog.create({

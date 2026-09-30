@@ -1,5 +1,8 @@
-// Kuro — Prisma schema (Fase 0)
-// Sumber: RANCANGAN_PENGEMBANGAN.md §4
+// Kuro — Prisma schema
+// Struktur: Project → Sprint → Task → Subtask
+//   Sprint  : timebox (satu aktif per project); di luar sprint = Backlog
+//   Task    : unit "cerita" (story) — metadata bisnis + brief + assignee pool
+//   Subtask : unit kerja terdalam — tempat freelancer clock in/out
 
 generator client {
   provider = "prisma-client-js"
@@ -31,6 +34,12 @@ enum Priority {
   high
 }
 
+enum SprintStatus {
+  planned
+  active
+  completed
+}
+
 enum CorrectionStatus {
   pending
   approved
@@ -54,8 +63,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  assignedTasks       Task[]               @relation("TaskAssignee")
+  taskAssignments     TaskAssignee[]
   createdTasks        Task[]               @relation("TaskCreator")
+  assignedSubtasks    Subtask[]            @relation("SubtaskAssignee")
+  createdSprints      Sprint[]             @relation("SprintCreator")
   timeEntries         TimeEntry[]
   correctionsFiled    CorrectionRequest[]  @relation("CorrectionRequestor")
   correctionsReviewed CorrectionRequest[]  @relation("CorrectionReviewer")
@@ -65,7 +76,8 @@ model User {
   requestersCreated   Requester[]
   periodsLocked       PeriodLock[]
   projectMemberships  ProjectMember[]
-  taskAttachments     TaskAttachment[] @relation("TaskAttachmentUploader")
+  taskAttachments     TaskAttachment[]     @relation("TaskAttachmentUploader")
+  subtaskAttachments  SubtaskAttachment[]  @relation("SubtaskAttachmentUploader")
 }
 
 model Project {
@@ -78,6 +90,7 @@ model Project {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   tasks       Task[]
+  sprints     Sprint[]
   members     ProjectMember[]
   requesters  ProjectRequester[]
 }
@@ -128,20 +141,69 @@ model Requester {
   projects  ProjectRequester[]
 }
 
+// ===== Sprint (menggantikan Group Task) =====
+// Timebox per project. Satu sprint aktif per project; di luar sprint = Backlog.
+model Sprint {
+  id          String       @id @default(uuid())
+  projectId   String
+  project     Project      @relation(fields: [projectId], references: [id])
+  name        String       @db.VarChar(120)
+  // Sprint Goal — opsional, format Markdown
+  goal        String?
+  startDate   DateTime     @db.Date
+  endDate     DateTime     @db.Date
+  status      SprintStatus @default(planned)
+  createdById String
+  createdBy   User         @relation("SprintCreator", fields: [createdById], references: [id])
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  tasks   Task[]
+  history TaskSprintHistory[]
+
+  @@index([projectId, status])
+  @@index([projectId, startDate])
+}
+
+/**
+ * Riwayat keanggotaan task di sebuah sprint (audit permanen, bukan hanya ActivityLog).
+ * Saat sprint ditutup dan task belum selesai → `leftAt` diisi, `leftReason` = carried_over.
+ */
+model TaskSprintHistory {
+  id            String      @id @default(uuid())
+  taskId        String
+  task          Task        @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  sprintId      String
+  sprint        Sprint      @relation(fields: [sprintId], references: [id], onDelete: Cascade)
+  joinedAt      DateTime    @default(now())
+  leftAt        DateTime?
+  // carried_over | moved | removed | sprint_completed
+  leftReason    String?
+  // status task saat dilepas dari sprint (snapshot)
+  statusAtLeave TaskStatus?
+  note          String?
+
+  @@index([taskId])
+  @@index([sprintId])
+}
+
+// ===== Task (unit "cerita"/story) =====
 model Task {
   id             String     @id @default(uuid())
   title          String     @db.VarChar(150)
-  description    String? // HTML rich text (disanitasi via DOMPurify saat simpan)
+  // Deskripsi/brief — format Markdown
+  description    String?
   projectId      String
   project        Project    @relation(fields: [projectId], references: [id])
+  // NULL = Backlog (di luar sprint)
+  sprintId       String?
+  sprint         Sprint?    @relation(fields: [sprintId], references: [id])
   workTypeId     String
   workType       WorkType   @relation(fields: [workTypeId], references: [id])
   requesterId    String
   requester      Requester  @relation(fields: [requesterId], references: [id])
   requestDate    DateTime   @db.Date
   priority       Priority   @default(medium)
-  assigneeId     String? // NULL = bucket bersama
-  assignee       User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
   deadlineAt     DateTime
   estimatedHours Decimal?   @db.Decimal(5, 1) // kelipatan 0,5
   status         TaskStatus @default(todo)
@@ -150,37 +212,77 @@ model Task {
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
-  timeEntries TimeEntry[]
-  attachments  TaskAttachment[]
+  assignees     TaskAssignee[]
+  subtasks      Subtask[]
+  attachments   TaskAttachment[]
+  sprintHistory TaskSprintHistory[]
 
-  @@index([status, assigneeId, deadlineAt])
+  @@index([status, deadlineAt])
   @@index([projectId])
+  @@index([sprintId])
   @@index([requesterId])
 }
 
+// Assign freelancer ke sebuah Task (multi-assignee) — pool yang boleh mengerjakan subtask
+model TaskAssignee {
+  id        String   @id @default(uuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+  @@index([userId])
+}
+
+// ===== Subtask (unit kerja terdalam) =====
+model Subtask {
+  id             String     @id @default(uuid())
+  taskId         String
+  task           Task       @relation(fields: [taskId], references: [id])
+  title          String     @db.VarChar(150)
+  // Deskripsi — format Markdown
+  description    String?
+  // NULL = bisa diklaim (bucket bersama)
+  assigneeId     String?
+  assignee       User?      @relation("SubtaskAssignee", fields: [assigneeId], references: [id])
+  status         TaskStatus @default(todo)
+  position       Int        @default(0)
+  estimatedHours Decimal?   @db.Decimal(5, 1)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  timeEntries TimeEntry[]
+  attachments SubtaskAttachment[]
+
+  @@index([taskId, position])
+  @@index([assigneeId, status])
+}
+
 model TimeEntry {
-  id                   String      @id @default(uuid())
-  userId               String
-  user                 User        @relation(fields: [userId], references: [id])
-  taskId               String
-  task                 Task        @relation(fields: [taskId], references: [id])
-  clockInAt            DateTime // UTC
-  clockOutAt           DateTime? // NULL = sesi aktif
-  note                 String? // wajib saat clock out (min. 10 karakter); opsional saat switch (Q4)
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  subtaskId  String
+  subtask    Subtask   @relation(fields: [subtaskId], references: [id])
+  clockInAt  DateTime // UTC
+  clockOutAt DateTime? // NULL = sesi aktif
+  note       String? // wajib saat clock out (min. 10 karakter); opsional saat switch (Q4)
   taskStatusAtCheckout TaskStatus?
-  createdAt            DateTime    @default(now())
+  createdAt  DateTime  @default(now())
 
   corrections CorrectionRequest[]
   attachments TimeEntryAttachment[]
 
   @@index([userId, clockOutAt])
-  @@index([taskId])
+  @@index([subtaskId])
   @@index([clockInAt])
   // NOTE: partial unique index "satu sesi aktif per user" (business rule #2)
   // dibuat via prisma/constraints.sql (Prisma tidak mendukung partial index di schema)
 }
 
-// Lampiran task (berkas/gambar) — diunggah admin saat membuat/mengubah task
+// Lampiran Task (brief/referensi) — diunggah admin saat membuat/mengubah task
 model TaskAttachment {
   id           String   @id @default(uuid())
   taskId       String
@@ -194,6 +296,22 @@ model TaskAttachment {
   createdAt    DateTime @default(now())
 
   @@index([taskId])
+}
+
+// Lampiran Subtask (hasil/lampiran pekerjaan)
+model SubtaskAttachment {
+  id           String   @id @default(uuid())
+  subtaskId    String
+  subtask      Subtask  @relation(fields: [subtaskId], references: [id], onDelete: Cascade)
+  fileName     String
+  objectKey    String
+  contentType  String
+  size         Int
+  uploadedById String
+  uploadedBy   User     @relation("SubtaskAttachmentUploader", fields: [uploadedById], references: [id])
+  createdAt    DateTime @default(now())
+
+  @@index([subtaskId])
 }
 
 // Lampiran saat clock out (berkas/gambar) — milik sebuah time entry
@@ -211,23 +329,23 @@ model TimeEntryAttachment {
 }
 
 model CorrectionRequest {
-  id            String           @id @default(uuid())
-  timeEntryId   String
-  timeEntry     TimeEntry        @relation(fields: [timeEntryId], references: [id])
-  requestedById String
-  requestedBy   User             @relation("CorrectionRequestor", fields: [requestedById], references: [id])
+  id             String           @id @default(uuid())
+  timeEntryId    String
+  timeEntry      TimeEntry        @relation(fields: [timeEntryId], references: [id])
+  requestedById  String
+  requestedBy    User             @relation("CorrectionRequestor", fields: [requestedById], references: [id])
   // nilai usulan (nilai lama ada di timeEntry; audit lengkap di ActivityLog)
-  newClockInAt  DateTime?
-  newClockOutAt DateTime?
-  newTaskId     String?
-  reason        String
-  status        CorrectionStatus @default(pending)
-  reviewedById  String?
-  reviewedBy    User?            @relation("CorrectionReviewer", fields: [reviewedById], references: [id])
-  reviewedAt    DateTime?
-  reviewNote    String?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  newClockInAt   DateTime?
+  newClockOutAt  DateTime?
+  newSubtaskId   String?
+  reason         String
+  status         CorrectionStatus @default(pending)
+  reviewedById   String?
+  reviewedBy     User?            @relation("CorrectionReviewer", fields: [reviewedById], references: [id])
+  reviewedAt     DateTime?
+  reviewNote     String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([status, createdAt])
 }
@@ -250,13 +368,13 @@ model ActivityLog {
 }
 
 model PeriodLock {
-  id        String   @id @default(uuid())
-  year      Int
-  month     Int
+  id         String   @id @default(uuid())
+  year       Int
+  month      Int
   lockedById String
-  lockedBy  User     @relation(fields: [lockedById], references: [id])
-  note      String?
-  lockedAt  DateTime @default(now())
+  lockedBy   User     @relation(fields: [lockedById], references: [id])
+  note       String?
+  lockedAt   DateTime @default(now())
 
   @@unique([year, month])
 }

@@ -144,13 +144,13 @@ export function DashboardClient() {
         <div className="rounded-lg border border-line bg-surface p-5 shadow-soft">
           <div className="mb-3 flex items-center gap-2">
             <ListChecks className="h-4 w-4 text-ink-500" />
-            <h2 className="font-heading text-[14px] font-bold text-ink-900">Task per Status</h2>
+            <h2 className="font-heading text-[14px] font-bold text-ink-900">Subtask per Status</h2>
             <span className="ml-auto text-[12.5px] font-bold text-ink-500">
-              {summary?.totalTasks ?? 0} total
+              {summary?.totalSubtasks ?? 0} subtask · {summary?.totalTasks ?? 0} task
             </span>
           </div>
           <TaskStatusDonut
-            counts={summary?.tasksByStatus ?? EMPTY_STATUS_COUNTS}
+            counts={summary?.subtasksByStatus ?? EMPTY_STATUS_COUNTS}
             statuses={ALL_STATUSES}
           />
         </div>
@@ -288,7 +288,7 @@ export function DashboardClient() {
                   <div className="min-w-0">
                     <p className="truncate text-[13.5px] font-bold text-ink-900">{t.title}</p>
                     <p className="mt-0.5 text-[12px] text-ink-500">
-                      {t.project} · {t.assignee ?? 'Belum di-assign'}
+                      {t.project} · {t.assignees.length ? t.assignees.join(', ') : 'Belum di-assign'}
                     </p>
                   </div>
                   <span className="shrink-0 rounded-full bg-pri-highbg px-2.5 py-1 text-[11px] font-extrabold text-pri-high">
@@ -345,9 +345,9 @@ function LiveCard({ session }: { session: LiveSession }) {
         </span>
       </div>
       <div className="mt-3 border-t border-line-soft pt-3">
-        <p className="truncate text-[13.5px] font-bold text-ink-900">{session.task.title}</p>
+        <p className="truncate text-[13.5px] font-bold text-ink-900">{session.subtask.title}</p>
         <p className="mt-0.5 truncate text-[12px] text-ink-500">
-          {session.task.project} · {session.task.workType}
+          {session.subtask.taskTitle} · {session.subtask.project} · {session.subtask.workType}
         </p>
       </div>
     </div>

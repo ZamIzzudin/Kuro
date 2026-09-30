@@ -18,6 +18,7 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
+  Target,
   Users,
   UserRound,
   type LucideIcon,
@@ -25,12 +26,15 @@ import {
 import { Brand } from "@/components/brand";
 import { Avatar } from "@/components/avatar";
 import { ProfileSheet } from "@/components/profile-sheet";
+import { ClockOutSheet } from "@/components/clock-out-sheet";
 import { ActiveSessionIndicator } from "@/components/active-session";
 import {
   ProjectScopeProvider,
   ProjectSwitcher,
 } from "@/components/project-scope";
+import { fetcher } from "@/lib/client";
 import type { SessionUser } from "@/lib/auth";
+import type { TimeEntryItem } from "@/lib/time-entries";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -68,6 +72,7 @@ const ADMIN_NAV: Array<{ group: string; items: NavItem[] }> = [
         exact: true,
       },
       { href: "/admin/tasks", label: "Task", icon: ListChecks },
+      { href: "/admin/sprints", label: "Sprint", icon: Target },
       { href: "/admin/users", label: "User", icon: Users },
     ],
   },
@@ -138,9 +143,30 @@ export function AppShell({
 
   const nav = user.role === "admin" ? ADMIN_NAV : FREELANCER_NAV;
   const title = titleForPath(pathname, user.role);
-  async function logout() {
+  const [logoutEntry, setLogoutEntry] = useState<TimeEntryItem | null>(null);
+  const [logoutBusy, setLogoutBusy] = useState(false);
+
+  async function doLogout() {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
     window.location.href = "/login";
+  }
+
+  // Freelancer: bila masih ada sesi berjalan, minta clock out dulu sebelum logout.
+  async function logout() {
+    if (user.role !== "freelancer") return doLogout();
+    setLogoutBusy(true);
+    try {
+      const { entry } = await fetcher<{ entry: TimeEntryItem | null }>("/api/time-entries/active");
+      if (entry) {
+        setLogoutEntry(entry);
+        return;
+      }
+    } catch {
+      // Bila gagal memeriksa, tetap izinkan logout.
+    } finally {
+      setLogoutBusy(false);
+    }
+    await doLogout();
   }
 
   const sidebar = (mode: "full" | "rail") => {
@@ -344,7 +370,8 @@ export function AppShell({
                       type="button"
                       role="menuitem"
                       onClick={logout}
-                      className="flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 transition hover:bg-pri-highbg hover:text-pri-high"
+                      disabled={logoutBusy}
+                      className="flex w-full items-center gap-2.5 rounded-sm px-2.5 py-2 text-left text-[13px] font-medium text-ink-700 transition hover:bg-pri-highbg hover:text-pri-high disabled:opacity-60"
                     >
                       <LogOut
                         className="h-[15px] w-[15px] shrink-0"
@@ -366,6 +393,20 @@ export function AppShell({
         onClose={() => setProfileOpen(false)}
         user={user}
       />
+
+      {logoutEntry && (
+        <ClockOutSheet
+          entry={logoutEntry}
+          title="Clock Out Dulu"
+          submitLabel="Clock Out & Logout"
+          allowSkip
+          onSkip={() => {
+            void doLogout();
+          }}
+          onClose={() => setLogoutEntry(null)}
+          onDone={doLogout}
+        />
+      )}
     </ProjectScopeProvider>
   );
 }

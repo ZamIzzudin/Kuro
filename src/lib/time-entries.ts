@@ -1,4 +1,5 @@
-// Kuro — helper time entry (Fase 3 / F2)
+// Kuro — helper time entry.
+// Sesuai hierarki baru, clock in/out selalu terhadap SUBTASK.
 // Aturan bisnis: rule #1 (tanpa task tidak ada clock in), #2 (1 sesi aktif), #7 (auto-assign),
 // #11 (periode terkunci), #12 (freelancer hanya lihat miliknya).
 import type { Prisma, TaskStatus } from '@prisma/client'
@@ -7,17 +8,22 @@ import { mapAttachment, type AttachmentItem } from './attachments'
 import { formatMinutes, wibYearMonth } from './time'
 
 export const TIME_ENTRY_INCLUDE = {
-  task: {
+  subtask: {
     include: {
-      project: { select: { id: true, name: true } },
-      workType: { select: { id: true, name: true } },
-      requester: { select: { id: true, name: true } },
+      task: {
+        include: {
+          project: { select: { id: true, name: true } },
+          workType: { select: { id: true, name: true } },
+          requester: { select: { id: true, name: true } },
+          sprint: { select: { id: true, name: true, status: true } },
+        },
+      },
     },
   },
   attachments: { orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.TimeEntryInclude
 
-type TimeEntryWithTask = Prisma.TimeEntryGetPayload<{ include: typeof TIME_ENTRY_INCLUDE }>
+type TimeEntryWithSubtask = Prisma.TimeEntryGetPayload<{ include: typeof TIME_ENTRY_INCLUDE }>
 
 export type TimeEntryItem = {
   id: string
@@ -29,13 +35,16 @@ export type TimeEntryItem = {
   active: boolean
   note: string | null
   taskStatusAtCheckout: TaskStatus | null
-  task: {
+  subtask: {
     id: string
     title: string
     status: TaskStatus
+    taskId: string
+    taskTitle: string
     project: { id: string; name: string }
     workType: { id: string; name: string }
     requester: { id: string; name: string }
+    sprint: { id: string; name: string; status: string } | null
   }
   /** label durasi siap tampil, mis. "2j 35m" */
   durationLabel: string
@@ -43,9 +52,10 @@ export type TimeEntryItem = {
   attachments: AttachmentItem[]
 }
 
-export function mapTimeEntry(e: TimeEntryWithTask, now = new Date()): TimeEntryItem {
+export function mapTimeEntry(e: TimeEntryWithSubtask, now = new Date()): TimeEntryItem {
   const end = e.clockOutAt ?? now
   const minutes = Math.max(0, Math.floor((end.getTime() - e.clockInAt.getTime()) / 60_000))
+  const t = e.subtask.task
   return {
     id: e.id,
     clockInAt: e.clockInAt.toISOString(),
@@ -54,13 +64,16 @@ export function mapTimeEntry(e: TimeEntryWithTask, now = new Date()): TimeEntryI
     active: e.clockOutAt === null,
     note: e.note,
     taskStatusAtCheckout: e.taskStatusAtCheckout,
-    task: {
-      id: e.task.id,
-      title: e.task.title,
-      status: e.task.status,
-      project: { id: e.task.project.id, name: e.task.project.name },
-      workType: { id: e.task.workType.id, name: e.task.workType.name },
-      requester: { id: e.task.requester.id, name: e.task.requester.name },
+    subtask: {
+      id: e.subtask.id,
+      title: e.subtask.title,
+      status: e.subtask.status,
+      taskId: t.id,
+      taskTitle: t.title,
+      project: { id: t.project.id, name: t.project.name },
+      workType: { id: t.workType.id, name: t.workType.name },
+      requester: { id: t.requester.id, name: t.requester.name },
+      sprint: t.sprint ? { id: t.sprint.id, name: t.sprint.name, status: t.sprint.status } : null,
     },
     durationLabel: minutes < 1 ? '< 1m' : formatMinutes(minutes),
     attachments: e.attachments.map(mapAttachment),
@@ -86,7 +99,7 @@ export async function isPeriodLocked(at: Date): Promise<boolean> {
 export const PERIOD_LOCK_MESSAGE =
   'Periode ini sudah dikunci. Hubungi admin untuk membuka kunci sebelum mengubah jam kerja.'
 
-/** Label status task untuk pesan/audit */
+/** Label status untuk pesan/audit */
 export const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'To Do',
   in_progress: 'In Progress',

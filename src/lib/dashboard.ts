@@ -36,21 +36,25 @@ function entryMinutes(e: RawEntry, now: Date): number {
 export type LiveSession = {
   id: string
   user: { id: string; name: string }
-  task: { id: string; title: string; project: string; workType: string }
+  subtask: { id: string; title: string; taskTitle: string; project: string; workType: string }
   clockInAt: string
   runningMinutes: number
 }
 
-/** Daftar sesi yang sedang berjalan (siapa clock in, task apa, sudah berapa lama) */
+/** Daftar sesi yang sedang berjalan (siapa clock in, subtask apa, sudah berapa lama) */
 export async function getLiveSessions(): Promise<LiveSession[]> {
   const entries = await db.timeEntry.findMany({
     where: { clockOutAt: null },
     include: {
       user: { select: { id: true, name: true } },
-      task: {
+      subtask: {
         include: {
-          project: { select: { name: true } },
-          workType: { select: { name: true } },
+          task: {
+            include: {
+              project: { select: { name: true } },
+              workType: { select: { name: true } },
+            },
+          },
         },
       },
     },
@@ -61,11 +65,12 @@ export async function getLiveSessions(): Promise<LiveSession[]> {
   return entries.map((e) => ({
     id: e.id,
     user: { id: e.user.id, name: e.user.name },
-    task: {
-      id: e.task.id,
-      title: e.task.title,
-      project: e.task.project.name,
-      workType: e.task.workType.name,
+    subtask: {
+      id: e.subtask.id,
+      title: e.subtask.title,
+      taskTitle: e.subtask.task.title,
+      project: e.subtask.task.project.name,
+      workType: e.subtask.task.workType.name,
     },
     clockInAt: e.clockInAt.toISOString(),
     runningMinutes: entryMinutes(e, now),
@@ -75,14 +80,27 @@ export async function getLiveSessions(): Promise<LiveSession[]> {
 export type DashboardSummary = {
   totals: { today: number; week: number; month: number }
   perUser: Array<{ id: string; name: string; today: number; week: number; month: number }>
-  tasksByStatus: Record<TaskStatus, number>
+  subtasksByStatus: Record<TaskStatus, number>
+  totalSubtasks: number
   totalTasks: number
   overdue: Array<{
     id: string
     title: string
     project: string
-    assignee: string | null
+    /** nama freelancer yang di-assign ke task, atau null (bucket bersama) */
+    assignees: string[]
     deadlineAt: string
+  }>
+  /** sprint aktif per project + progresnya */
+  activeSprints: Array<{
+    id: string
+    name: string
+    project: string
+    endDate: string
+    totalTasks: number
+    doneTasks: number
+    /** task di sprint ini yang deadline-nya melewati endDate sprint (peringatan) */
+    beyondDeadline: number
   }>
 }
 
@@ -94,7 +112,7 @@ const EMPTY_STATUS: Record<TaskStatus, number> = {
   cancelled: 0,
 }
 
-/** Ringkasan: total jam hari/minggu/bulan + task per status + daftar overdue */
+/** Ringkasan: total jam hari/minggu/bulan + subtask per status + sprint aktif + daftar overdue */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   const now = new Date()
   const dayStart = wibStartOfDay(now)
@@ -102,7 +120,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const monthStart = wibStartOfMonth(now)
   const queryFrom = weekStart < monthStart ? weekStart : monthStart
 
-  const [entries, statusGroups, overdueTasks] = await Promise.all([
+  const [entries, subtaskGroups, taskCount, overdueTasks, sprints] = await Promise.all([
     db.timeEntry.findMany({
       where: { clockInAt: { gte: queryFrom } },
       select: {
@@ -112,7 +130,8 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
         user: { select: { id: true, name: true } },
       },
     }),
-    db.task.groupBy({ by: ['status'], _count: { _all: true } }),
+    db.subtask.groupBy({ by: ['status'], _count: { _all: true } }),
+    db.task.count(),
     db.task.findMany({
       where: {
         deadlineAt: { lt: now },
@@ -120,10 +139,18 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       },
       include: {
         project: { select: { name: true } },
-        assignee: { select: { name: true } },
+        assignees: { include: { user: { select: { name: true } } } },
       },
       orderBy: { deadlineAt: 'asc' },
       take: 12,
+    }),
+    db.sprint.findMany({
+      where: { status: 'active' },
+      include: {
+        project: { select: { name: true } },
+        tasks: { select: { status: true, deadlineAt: true } },
+      },
+      orderBy: { endDate: 'asc' },
     }),
   ])
 
@@ -155,11 +182,11 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     perUserMap.set(e.userId, row)
   }
 
-  const tasksByStatus = { ...EMPTY_STATUS }
-  let totalTasks = 0
-  for (const g of statusGroups) {
-    tasksByStatus[g.status] = g._count._all
-    totalTasks += g._count._all
+  const subtasksByStatus = { ...EMPTY_STATUS }
+  let totalSubtasks = 0
+  for (const g of subtaskGroups) {
+    subtasksByStatus[g.status] = g._count._all
+    totalSubtasks += g._count._all
   }
 
   const perUser = Array.from(perUserMap.values()).sort((a, b) => b.month - a.month)
@@ -167,14 +194,24 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   return {
     totals: { today, week, month },
     perUser,
-    tasksByStatus,
-    totalTasks,
+    subtasksByStatus,
+    totalSubtasks,
+    totalTasks: taskCount,
     overdue: overdueTasks.map((t) => ({
       id: t.id,
       title: t.title,
       project: t.project.name,
-      assignee: t.assignee?.name ?? null,
+      assignees: t.assignees.map((a) => a.user.name),
       deadlineAt: t.deadlineAt.toISOString(),
+    })),
+    activeSprints: sprints.map((s) => ({
+      id: s.id,
+      name: s.name,
+      project: s.project.name,
+      endDate: s.endDate.toISOString(),
+      totalTasks: s.tasks.length,
+      doneTasks: s.tasks.filter((t) => t.status === 'done').length,
+      beyondDeadline: s.tasks.filter((t) => t.deadlineAt > s.endDate).length,
     })),
   }
 }

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict'
 import {
   attachmentInputSchema,
   changePasswordSchema,
+  clockInSchema,
   clockOutSchema,
   correctionCreateSchema,
   correctionRejectSchema,
@@ -15,13 +16,13 @@ import {
 } from '../src/lib/validators.ts'
 
 test('clockOutSchema: note wajib >= 10 karakter (rule #9)', () => {
-  const base = { note: 'menyelesaikan desain halaman utama', taskStatus: 'done' as const }
+  const base = { note: 'menyelesaikan desain halaman utama', subtaskStatus: 'done' as const }
   assert.equal(clockOutSchema.safeParse(base).success, true)
   assert.equal(clockOutSchema.safeParse({ ...base, note: 'pendek' }).success, false)
   // 9 karakter tetap gagal
   assert.equal(clockOutSchema.safeParse({ ...base, note: '123456789' }).success, false)
   // status tidak valid (cancelled bukan opsi clock out)
-  assert.equal(clockOutSchema.safeParse({ ...base, taskStatus: 'cancelled' }).success, false)
+  assert.equal(clockOutSchema.safeParse({ ...base, subtaskStatus: 'cancelled' }).success, false)
 })
 
 test('taskCreateSchema: estimasi harus kelipatan 0,5 jam', () => {
@@ -32,11 +33,32 @@ test('taskCreateSchema: estimasi harus kelipatan 0,5 jam', () => {
     requesterId: 'r1',
     requestDateLocal: '2026-09-01',
     deadlineLocal: '2026-09-30T17:00',
+    subtasks: [{ title: 'Subtask satu' }],
   }
   assert.equal(taskCreateSchema.safeParse({ ...base, estimatedHours: 2.5 }).success, true)
   assert.equal(taskCreateSchema.safeParse({ ...base, estimatedHours: 1.25 }).success, false)
   assert.equal(taskCreateSchema.safeParse({ ...base, estimatedHours: 0 }).success, false)
   assert.equal(taskCreateSchema.safeParse({ ...base, estimatedHours: null }).success, true)
+})
+
+test('taskCreateSchema: minimal satu subtask', () => {
+  const base = {
+    title: 'Task contoh',
+    projectId: 'p1',
+    workTypeId: 'w1',
+    requesterId: 'r1',
+    requestDateLocal: '2026-09-01',
+    deadlineLocal: '2026-09-30T17:00',
+  }
+  // tanpa subtasks → gagal
+  assert.equal(taskCreateSchema.safeParse(base).success, false)
+  // subtasks kosong → gagal
+  assert.equal(taskCreateSchema.safeParse({ ...base, subtasks: [] }).success, false)
+  // sprintId opsional (null = backlog)
+  assert.equal(
+    taskCreateSchema.safeParse({ ...base, sprintId: null, subtasks: [{ title: 'Satu' }] }).success,
+    true
+  )
 })
 
 test('correctionCreateSchema: butuh minimal satu usulan & alasan >= 10 char', () => {
@@ -113,6 +135,11 @@ test('attachmentInputSchema: metadata lampiran valid', () => {
   )
 })
 
+test('clockInSchema: subtaskId wajib', () => {
+  assert.equal(clockInSchema.safeParse({ subtaskId: 's1' }).success, true)
+  assert.equal(clockInSchema.safeParse({}).success, false)
+})
+
 test('taskCreateSchema & taskUpdateSchema: menerima daftar lampiran', () => {
   const base = {
     title: 'Task contoh',
@@ -121,6 +148,7 @@ test('taskCreateSchema & taskUpdateSchema: menerima daftar lampiran', () => {
     requesterId: 'r1',
     requestDateLocal: '2026-09-01',
     deadlineLocal: '2026-09-30T17:00',
+    subtasks: [{ title: 'Subtask satu' }],
   }
   const att = { objectKey: 'attachments/a.png', fileName: 'a.png', contentType: 'image/png', size: 10 }
   assert.equal(taskCreateSchema.safeParse({ ...base, attachments: [att] }).success, true)
@@ -130,7 +158,7 @@ test('taskCreateSchema & taskUpdateSchema: menerima daftar lampiran', () => {
 })
 
 test('clockOutSchema: lampiran opsional', () => {
-  const base = { note: 'menyelesaikan desain halaman utama', taskStatus: 'in_progress' as const }
+  const base = { note: 'menyelesaikan desain halaman utama', subtaskStatus: 'in_progress' as const }
   assert.equal(clockOutSchema.safeParse(base).success, true)
   assert.equal(clockOutSchema.safeParse({ ...base, attachments: [] }).success, true)
   assert.equal(

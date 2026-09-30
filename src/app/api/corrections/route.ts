@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
   const parsed = await parseJson(req, correctionCreateSchema)
   if (parsed.error) return parsed.error
-  const { timeEntryId, newClockInLocal, newClockOutLocal, newTaskId, reason } = parsed.data
+  const { timeEntryId, newClockInLocal, newClockOutLocal, newSubtaskId, reason } = parsed.data
 
   const entry = await db.timeEntry.findUnique({
     where: { id: timeEntryId },
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
     (newClockInAt && newClockInAt.getTime() !== entry.clockInAt.getTime()) ||
     (newClockOutAt &&
       newClockOutAt.getTime() !== (entry.clockOutAt?.getTime() ?? Number.NaN)) ||
-    (newTaskId && newTaskId !== entry.taskId)
+    (newSubtaskId && newSubtaskId !== entry.subtaskId)
   if (!changed) {
     return NextResponse.json(
       { error: 'Usulan koreksi sama dengan nilai saat ini.' },
@@ -75,9 +75,9 @@ export async function POST(req: Request) {
     )
   }
 
-  if (newTaskId) {
-    const task = await db.task.findUnique({ where: { id: newTaskId }, select: { id: true } })
-    if (!task) return NextResponse.json({ error: 'Task usulan tidak ditemukan.' }, { status: 400 })
+  if (newSubtaskId) {
+    const subtask = await db.subtask.findUnique({ where: { id: newSubtaskId }, select: { id: true } })
+    if (!subtask) return NextResponse.json({ error: 'Subtask usulan tidak ditemukan.' }, { status: 400 })
   }
 
   const created = await db.correctionRequest.create({
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
       requestedById: user.id,
       newClockInAt,
       newClockOutAt,
-      newTaskId: newTaskId || null,
+      newSubtaskId: newSubtaskId || null,
       reason,
     },
   })
@@ -101,11 +101,11 @@ export async function POST(req: Request) {
     oldValue: {
       clockInAt: entry.clockInAt,
       clockOutAt: entry.clockOutAt,
-      taskId: entry.taskId,
-      taskTitle: entry.task.title,
+      subtaskId: entry.subtaskId,
+      subtaskTitle: entry.subtask.title,
     },
-    newValue: { newClockInAt, newClockOutAt, newTaskId: newTaskId || null, reason },
-    description: `${user.name} mengajukan koreksi untuk task "${entry.task.title}" — ${reason}`,
+    newValue: { newClockInAt, newClockOutAt, newSubtaskId: newSubtaskId || null, reason },
+    description: `${user.name} mengajukan koreksi untuk subtask "${entry.subtask.title}" — ${reason}`,
   })
 
   return NextResponse.json(

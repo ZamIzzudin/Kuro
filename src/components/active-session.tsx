@@ -22,7 +22,7 @@ export function ActiveSessionIndicator({ compact = false }: { compact?: boolean 
     return (
       <Link
         href="/home"
-        title={`Berjalan: ${entry.task.title} — ${formatTimer(seconds)}`}
+        title={`Berjalan: ${entry.subtask.title} — ${formatTimer(seconds)}`}
         className="mb-2 flex items-center justify-center rounded-sm bg-brand-soft p-2.5 text-brand-1"
       >
         <Timer className="h-4 w-4" />
@@ -47,8 +47,10 @@ export function ActiveSessionIndicator({ compact = false }: { compact?: boolean 
           {formatTimer(seconds)}
         </span>
       </div>
-      <p className="mt-1 truncate text-[12.5px] font-bold text-ink-900">{entry.task.title}</p>
-      <p className="truncate text-[11.5px] text-ink-500">{entry.task.project.name}</p>
+      <p className="mt-1 truncate text-[12.5px] font-bold text-ink-900">{entry.subtask.title}</p>
+      <p className="truncate text-[11.5px] text-ink-500">
+        {entry.subtask.taskTitle} · {entry.subtask.project.name}
+      </p>
     </Link>
   )
 }

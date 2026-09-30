@@ -16,6 +16,10 @@
     "db:seed": "node prisma/seed.mjs",
     "template:tasks": "node scripts/template-tasks.mjs",
     "import:tasks": "node scripts/import-tasks.mjs",
+    "template:time-entries": "node scripts/template-time-entries.mjs",
+    "import:time-entries": "node scripts/import-time-entries.mjs",
+    "template:backfill": "node scripts/template-backfill.mjs",
+    "import:backfill": "node scripts/import-backfill.mjs",
     "storage:check": "node scripts/storage-check.mjs",
     "db:studio": "prisma studio"
   },
@@ -32,7 +36,10 @@
     "puppeteer-core": "^23.11.1",
     "react": "^18",
     "react-dom": "^18",
+    "react-markdown": "^10.1.0",
     "recharts": "^2.15.4",
+    "rehype-sanitize": "^6.0.0",
+    "remark-gfm": "^4.0.1",
     "swr": "^2.5.1",
     "zod": "^3.25.76"
   },

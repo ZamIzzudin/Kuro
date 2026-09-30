@@ -1,7 +1,8 @@
-// Kuro — seed awal (Fase 0)
-// - Akun admin pertama dari env INITIAL_ADMIN_EMAIL / INITIAL_ADMIN_PASSWORD
+// Kuro — seed awal
+// Hierarki: Project → Sprint → Task → Subtask
+// - Akun admin pertama dari env INITIAL_ADMIN_PASSWORD
 // - Master sample (Project / Jenis Pekerjaan / Requester) — idempotent
-// - SEED_DEMO=1 → tambah 1 akun freelancer demo
+// - SEED_DEMO=1 → tambah 1 akun freelancer demo + sprint/task/subtask contoh
 // Jalankan: npm run db:seed
 import { existsSync, readFileSync } from 'node:fs'
 import bcrypt from 'bcryptjs'
@@ -102,28 +103,67 @@ async function main() {
     console.log('✔ Project demo: banner warna, requester, & member freelancer terhubung')
 
     const workTypeRows = await db.workType.findMany({ take: 2 })
-    const demoDeadline = new Date(Date.now() + 14 * 86_400_000)
+
+    // Satu sprint AKTIF per project (idempotent: cari dulu sebelum buat)
+    const sprintRows = []
+    for (let i = 0; i < projectRows.length; i++) {
+      const project = projectRows[i]
+      const name = `Sprint 1 — ${project.name}`
+      let sprint = await db.sprint.findFirst({ where: { projectId: project.id, name } })
+      if (!sprint) {
+        sprint = await db.sprint.create({
+          data: {
+            projectId: project.id,
+            name,
+            goal: '**Sprint contoh** — menyelesaikan task dasar project ini.',
+            startDate: new Date(),
+            endDate: new Date(Date.now() + 14 * 86_400_000),
+            status: 'active',
+            createdById: admin.id,
+          },
+        })
+      }
+      sprintRows.push(sprint)
+    }
+    console.log('✔ Sprint demo aktif dibuat (1 per project)')
+
+    const demoDeadline = new Date(Date.now() + 10 * 86_400_000)
     for (let i = 0; i < projectRows.length; i++) {
       const title = `[Demo] Task contoh ${i + 1}`
       const exists = await db.task.findFirst({ where: { title } })
       if (exists) continue
-      await db.task.create({
+      const task = await db.task.create({
         data: {
           title,
           description: 'Task contoh dari seed demo — silakan hapus bila tidak diperlukan.',
           projectId: projectRows[i].id,
+          sprintId: sprintRows[i].id,
           workTypeId: workTypeRows[i % workTypeRows.length].id,
           requesterId: requesterRows[i % requesterRows.length].id,
-          assigneeId: i === 0 ? freelancer.id : null,
           priority: i === 0 ? 'high' : 'medium',
           estimatedHours: 4,
           requestDate: new Date(),
           deadlineAt: demoDeadline,
           createdById: admin.id,
+          assignees: i === 0 ? { create: [{ userId: freelancer.id }] } : undefined,
+          subtasks: {
+            create: [
+              {
+                title: `Subtask ${i + 1}.1`,
+                assigneeId: i === 0 ? freelancer.id : null,
+                position: 0,
+                estimatedHours: 2,
+              },
+              { title: `Subtask ${i + 1}.2`, position: 1, estimatedHours: 2 },
+            ],
+          },
         },
       })
+      await db.taskSprintHistory.create({
+        data: { taskId: task.id, sprintId: sprintRows[i].id, joinedAt: new Date() },
+      })
     }
-    console.log('✔ Task demo dibuat (1 di-assign, 1 bucket bersama)')
+    console.log('✔ Task & subtask demo dibuat (1 di-assign, 1 bucket bersama)')
   }
 
   console.log('\nSelesai. Catatan: akun admin memakai INITIAL_ADMIN_PASSWORD — ganti password setelah login pertama.')

@@ -4,8 +4,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireApiUser } from '@/lib/auth'
-import { freelancerTaskScope } from '@/lib/tasks'
-import { StorageNotConfiguredError, getObjectBuffer, isStorageConfigured } from '@/lib/storage'
+import { freelancerSubtaskScope, freelancerTaskScope } from '@/lib/tasks'
+import { StorageNotConfiguredError, getObjectBuffer } from '@/lib/storage'
 
 function contentDispositionInline(contentType: string, fileName: string) {
   const kind = contentType.startsWith('image/') ? 'inline' : 'attachment'
@@ -38,6 +38,25 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     fileName = taskAtt.fileName
     contentType = taskAtt.contentType
   } else {
+    const subtaskAtt = await db.subtaskAttachment.findUnique({
+      where: { id: params.id },
+      include: { subtask: { select: { id: true } } },
+    })
+    if (subtaskAtt) {
+      if (user.role === 'freelancer') {
+        const allowed = await db.subtask.findFirst({
+          where: { AND: [{ id: subtaskAtt.subtaskId }, freelancerSubtaskScope(user.id)] },
+          select: { id: true },
+        })
+        if (!allowed) return NextResponse.json({ error: 'Lampiran tidak ditemukan.' }, { status: 404 })
+      }
+      objectKey = subtaskAtt.objectKey
+      fileName = subtaskAtt.fileName
+      contentType = subtaskAtt.contentType
+    }
+  }
+
+  if (!objectKey) {
     const entryAtt = await db.timeEntryAttachment.findUnique({
       where: { id: params.id },
       include: { timeEntry: { select: { userId: true } } },
@@ -49,10 +68,6 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     objectKey = entryAtt.objectKey
     fileName = entryAtt.fileName
     contentType = entryAtt.contentType
-  }
-
-  if (!isStorageConfigured()) {
-    return NextResponse.json({ error: 'Storage belum dikonfigurasi.' }, { status: 503 })
   }
 
   try {

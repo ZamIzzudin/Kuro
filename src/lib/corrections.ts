@@ -22,6 +22,8 @@ export type CorrectionEntrySnapshot = {
   active: boolean
   minutes: number
   note: string | null
+  subtaskId: string
+  subtaskTitle: string
   taskId: string
   taskTitle: string
   project: string
@@ -47,8 +49,8 @@ export type CorrectionItem = {
   proposed: {
     clockInAt: string | null
     clockOutAt: string | null
-    taskId: string | null
-    taskTitle: string | null
+    subtaskId: string | null
+    subtaskTitle: string | null
   }
   /** ada usulan perubahan? */
   hasProposal: boolean
@@ -60,7 +62,7 @@ function minutesBetween(from: Date, to: Date): number {
 
 export function mapCorrection(
   c: CorrectionWithRelations,
-  taskTitles: Map<string, string> = new Map()
+  subtaskTitles: Map<string, string> = new Map()
 ): CorrectionItem {
   const e = c.timeEntry
   const end = e.clockOutAt ?? new Date()
@@ -81,24 +83,26 @@ export function mapCorrection(
       active: e.clockOutAt === null,
       minutes: minutesBetween(e.clockInAt, end),
       note: e.note,
-      taskId: e.task.id,
-      taskTitle: e.task.title,
-      project: e.task.project.name,
-      workType: e.task.workType.name,
-      requester: e.task.requester.name,
+      subtaskId: e.subtask.id,
+      subtaskTitle: e.subtask.title,
+      taskId: e.subtask.task.id,
+      taskTitle: e.subtask.task.title,
+      project: e.subtask.task.project.name,
+      workType: e.subtask.task.workType.name,
+      requester: e.subtask.task.requester.name,
       locked: false,
     },
     proposed: {
       clockInAt: c.newClockInAt ? c.newClockInAt.toISOString() : null,
       clockOutAt: c.newClockOutAt ? c.newClockOutAt.toISOString() : null,
-      taskId: c.newTaskId,
-      taskTitle: c.newTaskId ? taskTitles.get(c.newTaskId) ?? null : null,
+      subtaskId: c.newSubtaskId,
+      subtaskTitle: c.newSubtaskId ? subtaskTitles.get(c.newSubtaskId) ?? null : null,
     },
-    hasProposal: !!(c.newClockInAt || c.newClockOutAt || c.newTaskId),
+    hasProposal: !!(c.newClockInAt || c.newClockOutAt || c.newSubtaskId),
   }
 }
 
-/** Ambil daftar koreksi (join judul task usulan + status lock per entri). */
+/** Ambil daftar koreksi (join judul subtask usulan + status lock per entri). */
 export async function listCorrections(where: Prisma.CorrectionRequestWhereInput) {
   const rows = await db.correctionRequest.findMany({
     where,
@@ -107,16 +111,16 @@ export async function listCorrections(where: Prisma.CorrectionRequestWhereInput)
     take: 300,
   })
 
-  const proposedTaskIds = Array.from(
-    new Set(rows.map((r) => r.newTaskId).filter((v): v is string => !!v))
+  const proposedSubtaskIds = Array.from(
+    new Set(rows.map((r) => r.newSubtaskId).filter((v): v is string => !!v))
   )
-  const proposedTasks = proposedTaskIds.length
-    ? await db.task.findMany({
-        where: { id: { in: proposedTaskIds } },
+  const proposedSubtasks = proposedSubtaskIds.length
+    ? await db.subtask.findMany({
+        where: { id: { in: proposedSubtaskIds } },
         select: { id: true, title: true },
       })
     : []
-  const taskTitles = new Map(proposedTasks.map((t) => [t.id, t.title]))
+  const subtaskTitles = new Map(proposedSubtasks.map((s) => [s.id, s.title]))
 
   const locks = await db.periodLock.findMany({ select: { year: true, month: true } })
   const lockedKeys = new Set(locks.map((l) => `${l.year}-${l.month}`))
@@ -126,7 +130,7 @@ export async function listCorrections(where: Prisma.CorrectionRequestWhereInput)
   }
 
   return rows.map((r) => {
-    const item = mapCorrection(r, taskTitles)
+    const item = mapCorrection(r, subtaskTitles)
     const lockIn = isLocked(r.timeEntry.clockInAt)
     const lockOut = r.timeEntry.clockOutAt ? isLocked(r.timeEntry.clockOutAt) : false
     item.current.locked = lockIn || lockOut
@@ -163,7 +167,7 @@ export async function validateEntryChange(opts: {
   entryId: string
   clockInAt: Date
   clockOutAt: Date | null
-  taskId?: string
+  subtaskId?: string
 }): Promise<ChangeValidation> {
   if (opts.clockOutAt && opts.clockOutAt.getTime() <= opts.clockInAt.getTime()) {
     return { message: 'Jam keluar harus setelah jam masuk.', status: 400 }
@@ -204,9 +208,9 @@ export async function validateEntryChange(opts: {
     return { message: 'Rentang waktu bertumpang tindih dengan sesi kerja lain.', status: 409 }
   }
 
-  if (opts.taskId) {
-    const task = await db.task.findUnique({ where: { id: opts.taskId }, select: { id: true } })
-    if (!task) return { message: 'Task tidak ditemukan.', status: 400 }
+  if (opts.subtaskId) {
+    const subtask = await db.subtask.findUnique({ where: { id: opts.subtaskId }, select: { id: true } })
+    if (!subtask) return { message: 'Subtask tidak ditemukan.', status: 400 }
   }
 
   return null

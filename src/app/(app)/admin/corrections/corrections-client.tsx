@@ -222,9 +222,9 @@ function CorrectionReviewCard({
               proposed={item.proposed.clockOutAt ? formatWIB(item.proposed.clockOutAt, 'dd MMM yyyy HH.mm') : null}
             />
             <DiffRow
-              label="Task"
-              current={c.taskTitle}
-              proposed={item.proposed.taskId ? item.proposed.taskTitle ?? 'Task tidak diketahui' : null}
+              label="Subtask"
+              current={c.subtaskTitle}
+              proposed={item.proposed.subtaskId ? item.proposed.subtaskTitle ?? 'Subtask tidak diketahui' : null}
             />
             <tr className="border-t border-line-soft">
               <td className="px-3 py-2 font-semibold text-ink-500">Durasi</td>
@@ -355,7 +355,7 @@ function RejectSheet({
       open
       onClose={onClose}
       title="Tolak Koreksi"
-      description={`${item.requestedBy.name} · ${item.current.taskTitle}`}
+      description={`${item.requestedBy.name} · ${item.current.subtaskTitle}`}
     >
       <div className="space-y-4">
         <div className="rounded-lg bg-surface-2/60 p-3 text-[12.5px] text-ink-600">
@@ -363,7 +363,7 @@ function RejectSheet({
           <p className="mt-1">
             {item.proposed.clockInAt ? `Masuk → ${formatWIB(item.proposed.clockInAt, 'dd MMM HH.mm')}` : null}
             {item.proposed.clockOutAt ? ` · Keluar → ${formatWIB(item.proposed.clockOutAt, 'dd MMM HH.mm')}` : null}
-            {item.proposed.taskId ? ` · Task → ${item.proposed.taskTitle ?? '—'}` : null}
+            {item.proposed.subtaskId ? ` · Subtask → ${item.proposed.subtaskTitle ?? '—'}` : null}
           </p>
           <p className="mt-1 italic text-ink-500">&ldquo;{item.reason}&rdquo;</p>
         </div>
@@ -415,11 +415,11 @@ function EditEntrySheet({
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const tasksReq = useSWR<{ tasks: Array<{ id: string; title: string }> }>(
-    '/api/tasks/available',
+  const subtasksReq = useSWR<{ subtasks: Array<{ id: string; title: string }> }>(
+    '/api/subtasks/available',
     fetcher
   )
-  const [taskId, setTaskId] = useState(c.taskId)
+  const [subtaskId, setSubtaskId] = useState(c.subtaskId)
 
   async function submit() {
     setSaving(true)
@@ -428,7 +428,7 @@ function EditEntrySheet({
       await apiSend(`/api/time-entries/${c.id}`, 'PATCH', {
         clockInLocal: clockIn,
         clockOutLocal: clockOut || null,
-        taskId,
+        subtaskId,
         note: note || null,
         reason: reason.trim(),
       })
@@ -448,7 +448,7 @@ function EditEntrySheet({
       open
       onClose={onClose}
       title="Edit Time Entry"
-      description={`${item.requestedBy.name} · ${c.taskTitle}`}
+      description={`${item.requestedBy.name} · ${c.subtaskTitle}`}
       size="lg"
     >
       <div className="space-y-4">
@@ -475,9 +475,9 @@ function EditEntrySheet({
         </div>
 
         <div>
-          <FieldLabel htmlFor="ed-task">Task</FieldLabel>
-          <Select id="ed-task" value={taskId} onChange={(e) => setTaskId(e.target.value)}>
-            {(tasksReq.data?.tasks ?? [{ id: c.taskId, title: c.taskTitle }]).map((t) => (
+          <FieldLabel htmlFor="ed-task">Subtask</FieldLabel>
+          <Select id="ed-task" value={subtaskId} onChange={(e) => setSubtaskId(e.target.value)}>
+            {(subtasksReq.data?.subtasks ?? [{ id: c.subtaskId, title: c.subtaskTitle }]).map((t) => (
               <option key={t.id} value={t.id}>
                 {t.title}
               </option>
