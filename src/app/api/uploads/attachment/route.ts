@@ -12,7 +12,7 @@ import {
 } from '@/lib/storage'
 
 export async function POST(req: Request) {
-  const { error } = await requireApiUser(['admin', 'freelancer'])
+  const { error } = await requireApiUser(['admin', 'project_manager', 'freelancer'])
   if (error) return error
 
   if (!isStorageConfigured()) {

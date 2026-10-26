@@ -13,12 +13,13 @@ import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { findTask, mapTask, TASK_INCLUDE } from '@/lib/tasks'
 import { closeSprintMembership, recordSprintJoin } from '@/lib/sprints'
 import { taskRevisionSchema } from '@/lib/validators'
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, taskRevisionSchema)

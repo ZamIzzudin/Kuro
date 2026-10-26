@@ -1,10 +1,11 @@
-// /api/sprints — GET (daftar sprint; freelancer scoped ke project-nya) & POST (admin)
+// /api/sprints — GET (daftar sprint; freelancer scoped ke project-nya) & POST (admin & project manager)
 import type { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { mapSprint, SPRINT_INCLUDE, sprintCounts } from '@/lib/sprints'
 import { freelancerProjectScope } from '@/lib/tasks'
 import { dateOnlyUTC } from '@/lib/time'
@@ -41,7 +42,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, sprintCreateSchema)

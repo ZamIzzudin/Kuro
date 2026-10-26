@@ -13,7 +13,7 @@ import { correctionCreateSchema } from '@/lib/validators'
 const STATUSES = ['pending', 'approved', 'rejected'] as const
 
 export async function GET(req: Request) {
-  const { user, error } = await requireApiUser()
+  const { user, error } = await requireApiUser(['admin', 'freelancer'])
   if (error) return error
 
   const sp = new URL(req.url).searchParams

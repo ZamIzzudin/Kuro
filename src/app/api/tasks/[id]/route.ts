@@ -1,10 +1,11 @@
-// /api/tasks/:id — GET (detail, semua login) & PATCH (admin: edit lengkap, multi-assignee,
+// /api/tasks/:id — GET (detail, semua login) & PATCH (admin & project manager: edit lengkap, multi-assignee,
 // sinkronisasi subtask, pindah sprint, set status incl. Cancelled)
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { createTaskAttachments } from '@/lib/attachments'
 import { findTask, mapTask, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
 import { closeSprintMembership, recordSprintJoin } from '@/lib/sprints'
@@ -28,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, taskUpdateSchema)

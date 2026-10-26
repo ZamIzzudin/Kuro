@@ -18,8 +18,9 @@ import { Sheet } from '@/components/sheet'
 import { apiSend, fetcher } from '@/lib/client'
 import { MONTH_NAMES, formatMinutes, formatWIB, periodLabel } from '@/lib/time'
 import type { PeriodLockItem, ReportResponse, ReportUser } from '@/lib/reports'
+import type { Role } from '@/lib/roles'
 
-type UserOption = { id: string; name: string; role: 'admin' | 'freelancer'; isActive: boolean }
+type UserOption = { id: string; name: string; role: Role; isActive: boolean }
 
 export function ReportsClient() {
   const now = new Date()

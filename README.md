@@ -161,7 +161,7 @@ Deploy pertama kali: set `RUN_DB_SEED=true` agar admin + master sample dibuat, l
   - Bila MinIO di balik domain HTTPS (mis. `s3.notu.dev`): `MINIO_ENDPOINT=s3.notu.dev`, `MINIO_PORT=` (kosongkan), `MINIO_USE_SSL=true`. Port kosong otomatis jadi **443** (HTTPS) atau **9000** (HTTP).
   - Bila akses langsung tanpa TLS: `MINIO_ENDPOINT=<ip>`, `MINIO_PORT=9000`, `MINIO_USE_SSL=false`.
 - **Dropdown project freelancer**: di sidebar, tepat di bawah logo Kuro. Project menjadi konteks kerja — project pertama dipilih otomatis dan pilihan disimpan di `localStorage` per user. Bila admin belum meng-assign freelancer ke project mana pun, muncul label **“Belum di-assign ke project”** dan Task Bucket memberi panduan, bukan papan kosong.
-- **Master data**: **Jenis Pekerjaan** dan **Requester** (tambahan requester hanya Admin). **Project** dipindah ke halaman tersendiri.
+- **Master data**: **Jenis Pekerjaan** dan **Requester** (dikelola Admin & Project Manager). **Project** dipindah ke halaman tersendiri.
 - **Task per-project**: freelancer membuka `/bucket` yang **langsung menampilkan papan kanban SUBTASK project yang sedang dipilih** (satu kartu = satu subtask), dengan filter **Sprint Aktif / Backlog**; perpindahan project hanya lewat dropdown di sidebar (`ProjectSwitcher`). **Kartu subtask bisa digeser (drag & drop) antar kolom status** (drag bawaan HTML5, tanpa dependensi tambahan) — hanya untuk subtask di sprint aktif yang belum selesai dan miliknya/bisa diklaim. Admin memakai daftar project di `/admin/tasks` lalu detail `/admin/tasks/[projectId]` (kolom Sprint, jumlah subtask, multi-assignee, dan form task dengan editor subtask). Statistik project dari `GET /api/projects/overview`.
 - **Multi-assignee**: satu Task bisa di-assign ke beberapa freelancer (`TaskAssignee`). Assignee subtask harus termasuk dalam pool assignee task; subtask tanpa assignee bisa diklaim siapa pun di project (bucket bersama).
 - **Detail**: `TaskDetailSheet` (`GET /api/tasks/:id`) menampilkan info task + brief + daftar subtask; `SubtaskDetailSheet` (`GET /api/subtasks/:id`) menampilkan info task induk, assignee, deskripsi Markdown, progres waktu, dan lampiran subtask.
@@ -173,9 +173,14 @@ Deploy pertama kali: set `RUN_DB_SEED=true` agar admin + master sample dibuat, l
 - **Sidebar**: bisa di-collapse (rail 76px) dan preferensi disimpan di `localStorage`.
 - **Waktu**: semua disimpan UTC, ditampilkan WIB (`Asia/Jakarta`) — helper di `src/lib/time.ts`.
 - **Rekap & export**: rekap dihitung dari entry yang sudah clock out, dibulatkan ke bawah per menit; XLSX via ExcelJS (4 sheet), PDF via puppeteer-core. Di lokal, Chromium/Chrome/Edge dicari otomatis; di Docker sudah diarahkan ke chromium sistem (`PUPPETEER_EXECUTABLE_PATH`).
+- **RBAC**: role dicek di API (`requireApiUser`) dan server layout (`/admin`), bukan hanya UI. Tiga role:
+  - **Admin** — akses penuh (semua halaman admin).
+  - **Project Manager** — mengelola **Project, Sprint, Task, dan Master Data**; **tanpa** User, Rekap & Export, dan Review Koreksi (dashboard tetap bisa dibuka).
+  - **Freelancer** — area kerja sendiri (`/home`, `/bucket`, `/my-time`, `/corrections`).
+  - Pengecekan area `/admin` memakai `hasAdminAccess()` (`src/lib/roles.ts`); halaman eksklusif Admin (`/admin/users`, `/admin/reports`, `/admin/corrections`) dijaga ulang di level halaman + API.
 - **Koreksi (F6)**: freelancer mengajukan usulan perubahan jam/task pada sesinya; admin approve/reject dengan catatan. Saat approve, usulan divalidasi ulang (1 sesi aktif, periode terkunci, jam keluar > masuk, tidak tumpang tindih) sebelum diterapkan dalam transaksi. Admin juga bisa **edit langsung** time entry (Q5) — wajib alasan & ter-audit. Semua perubahan tercatat di activity log (nilai lama & baru).
 - **Profil sendiri**: klik chip user di topbar → **Sheet Profil** untuk mengubah **foto profil** (unggah ke MinIO lewat `POST /api/uploads/avatar`, maks 2 MB, PNG/JPEG/WebP; ditampilkan via proxy `GET /api/users/:id/avatar`), **username** (unik, 3–30 huruf kecil/angka/`.`/`_`/`-`), dan **nama lengkap** via `PATCH /api/profile`. **Email tidak dapat diubah**. Ganti password lewat `POST /api/profile/password` (wajib password lama; sesi lain di-revoke, sesi saat ini dipertahankan). Semua perubahan tercatat di activity log. Bila MinIO belum dikonfigurasi, avatar memakai inisial dan unggah foto menampilkan pesan jelas.
 - **Auth**: session cookie httpOnly (sliding 8 jam), token di DB berupa SHA-256 hash; reset password via token 1 jam sekali pakai; rate limit login & reset.
-- **RBAC**: role dicek di API (`requireApiUser`) dan server layout (`/admin`), bukan hanya UI.
+- **RBAC**: role dicek di API (`requireApiUser`) dan server layout (`/admin`), bukan hanya UI. Aturan area admin terpusat di `hasAdminAccess()` (`src/lib/roles.ts`).
 - **Audit**: semua aksi lewat `logActivity()` (`src/lib/activity.ts`) — tabel append-only.
 - **Tanpa SMTP di dev**: email reset dicetak ke console server (`[mail:dev]`).

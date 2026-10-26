@@ -34,6 +34,7 @@ import {
   StatusPill,
 } from "@/components/task-bits";
 import { apiSend, fetcher } from "@/lib/client";
+import type { Role } from "@/lib/roles";
 import { dateToWibLocal, formatDateWIB, todayWibDate } from "@/lib/time";
 import type { TaskItem } from "@/lib/tasks";
 import type { SprintItem } from "@/lib/sprints";
@@ -43,7 +44,7 @@ type MasterOption = { id: string; name: string; isActive: boolean };
 type UserRow = {
   id: string;
   name: string;
-  role: "admin" | "freelancer";
+  role: Role;
   isActive: boolean;
 };
 

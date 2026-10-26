@@ -1,13 +1,14 @@
 // /api/projects — daftar & buat project (enhancement: banner, requester, member)
 // GET  : admin → semua project; freelancer → project aktif yang di-assign ke dia
 //        (dipakai juga untuk dropdown project di sidebar freelancer)
-// POST : admin only — buat project lengkap
+// POST : admin & project manager — buat project lengkap
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson, prismaError } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
 import { listProjects, mapProject, validateProjectRelations } from '@/lib/projects'
+import { hasAdminAccess, ADMIN_ROLES } from '@/lib/roles'
 import { freelancerProjectScope } from '@/lib/tasks'
 import { projectCreateSchema } from '@/lib/validators'
 
@@ -16,7 +17,7 @@ export async function GET() {
   if (error) return error
 
   const where =
-    user.role === 'admin'
+    hasAdminAccess(user.role)
       ? undefined
       : { isActive: true, ...freelancerProjectScope(user.id) }
 
@@ -25,7 +26,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, projectCreateSchema)

@@ -1,4 +1,4 @@
-// /api/tasks — GET (semua login; freelancer: dalam scope-nya) & POST (admin)
+// /api/tasks — GET (semua login; freelancer: dalam scope-nya) & POST (admin & project manager)
 // Hierarki baru: task punya banyak assignee (TaskAssignee) & banyak subtask.
 import type { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
@@ -6,6 +6,7 @@ import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { createTaskAttachments } from '@/lib/attachments'
 import { mapTask, sortTasks, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
 import { recordSprintJoin } from '@/lib/sprints'
@@ -59,7 +60,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, taskCreateSchema)

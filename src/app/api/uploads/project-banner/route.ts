@@ -1,7 +1,8 @@
-// POST /api/uploads/project-banner — unggah gambar banner ke MinIO (admin only)
+// POST /api/uploads/project-banner — unggah gambar banner ke MinIO (admin & project manager)
 // Multipart: field "file". Mengembalikan { key } untuk disimpan di project.bannerKey.
 import { NextResponse } from 'next/server'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import {
   ALLOWED_BANNER_TYPES,
   MAX_BANNER_BYTES,
@@ -12,7 +13,7 @@ import {
 } from '@/lib/storage'
 
 export async function POST(req: Request) {
-  const { error } = await requireApiUser(['admin'])
+  const { error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   if (!isStorageConfigured()) {

@@ -29,6 +29,7 @@ import { Sheet } from "@/components/sheet";
 import { StatusBadge } from "@/components/pills";
 import { TaskStatusDonut } from "@/components/status-donut";
 import { apiSend, fetcher } from "@/lib/client";
+import type { Role } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import type { ProjectItem } from "@/lib/projects";
 
@@ -37,7 +38,7 @@ type UserRow = {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "freelancer";
+  role: Role;
   isActive: boolean;
 };
 

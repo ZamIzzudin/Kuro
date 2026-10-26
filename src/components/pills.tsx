@@ -1,16 +1,14 @@
 // Badge kecil: role & status aktif
-export function RoleBadge({ role }: { role: 'admin' | 'freelancer' }) {
-  return (
-    <span
-      className={
-        role === 'admin'
-          ? 'inline-block rounded-full bg-brand-soft px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-brand-1'
-          : 'inline-block rounded-full bg-surface-2 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-ink-500 ring-1 ring-line'
-      }
-    >
-      {role === 'admin' ? 'Admin' : 'Freelancer'}
-    </span>
-  )
+import { ROLE_LABELS, type Role } from '@/lib/roles'
+
+export function RoleBadge({ role }: { role: Role }) {
+  const cls =
+    role === 'admin'
+      ? 'inline-block rounded-full bg-brand-soft px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-brand-1'
+      : role === 'project_manager'
+        ? 'inline-block rounded-full bg-pri-mediumbg px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-pri-medium'
+        : 'inline-block rounded-full bg-surface-2 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wide text-ink-500 ring-1 ring-line'
+  return <span className={cls}>{ROLE_LABELS[role]}</span>
 }
 
 export function StatusBadge({ active }: { active: boolean }) {

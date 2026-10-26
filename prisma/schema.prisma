@@ -17,6 +17,7 @@ datasource db {
 
 enum Role {
   admin
+  project_manager
   freelancer
 }
 

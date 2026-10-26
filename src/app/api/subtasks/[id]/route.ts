@@ -1,9 +1,10 @@
-// /api/subtasks/:id — GET (detail, scoped) & PATCH (admin: judul/deskripsi/assignee/estimasi/lampiran)
+// /api/subtasks/:id — GET (detail, scoped) & PATCH (admin & project manager: judul/deskripsi/assignee/estimasi/lampiran)
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { createSubtaskAttachments } from '@/lib/attachments'
 import { SUBTASK_INCLUDE, mapSubtask, freelancerSubtaskScope } from '@/lib/tasks'
 import { removeObject } from '@/lib/storage'
@@ -56,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, subtaskUpdateSchema)
@@ -116,7 +117,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const subtask = await db.subtask.findUnique({

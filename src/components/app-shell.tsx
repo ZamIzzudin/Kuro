@@ -34,6 +34,7 @@ import {
 } from "@/components/project-scope";
 import { fetcher } from "@/lib/client";
 import type { SessionUser } from "@/lib/auth";
+import { ROLE_LABELS, type Role } from "@/lib/roles";
 import type { TimeEntryItem } from "@/lib/time-entries";
 import { cn } from "@/lib/utils";
 
@@ -100,14 +101,49 @@ const ADMIN_NAV: Array<{ group: string; items: NavItem[] }> = [
   },
 ];
 
+/** Project Manager: sama seperti Admin tanpa User, Rekap & Export, dan Review Koreksi. */
+const PROJECT_MANAGER_NAV: Array<{ group: string; items: NavItem[] }> = [
+  {
+    group: "Utama",
+    items: [
+      {
+        href: "/admin",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        exact: true,
+      },
+      { href: "/admin/tasks", label: "Task", icon: ListChecks },
+      { href: "/admin/sprints", label: "Sprint", icon: Target },
+    ],
+  },
+  {
+    group: "Data",
+    items: [
+      { href: "/admin/projects", label: "Project", icon: FolderKanban },
+      { href: "/admin/masters", label: "Master Data", icon: Database },
+    ],
+  },
+];
+
+const NAV_BY_ROLE: Record<Role, Array<{ group: string; items: NavItem[] }>> = {
+  admin: ADMIN_NAV,
+  project_manager: PROJECT_MANAGER_NAV,
+  freelancer: FREELANCER_NAV,
+};
+
+/** Halaman beranda per role: admin-tier masuk /admin, freelancer ke /home. */
+function homeFor(role: Role): string {
+  return role === "freelancer" ? "/home" : "/admin";
+}
+
 /** Item aktif: cocokkan prefix terpanjang; item `exact` hanya cocok persis */
 function isActive(pathname: string, item: NavItem): boolean {
   if (item.exact) return pathname === item.href;
   return pathname === item.href || pathname.startsWith(item.href + "/");
 }
 
-function titleForPath(pathname: string, role: "admin" | "freelancer"): string {
-  const nav = role === "admin" ? ADMIN_NAV : FREELANCER_NAV;
+function titleForPath(pathname: string, role: Role): string {
+  const nav = NAV_BY_ROLE[role];
   const items = nav.flatMap((g) => g.items);
   // match terpanjang dulu (agar '/admin/tasks' tidak kena '/admin')
   const sorted = [...items].sort((a, b) => b.href.length - a.href.length);
@@ -141,7 +177,7 @@ export function AppShell({
     });
   }
 
-  const nav = user.role === "admin" ? ADMIN_NAV : FREELANCER_NAV;
+  const nav = NAV_BY_ROLE[user.role];
   const title = titleForPath(pathname, user.role);
   const [logoutEntry, setLogoutEntry] = useState<TimeEntryItem | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
@@ -180,7 +216,7 @@ export function AppShell({
           )}
         >
           <Link
-            href={user.role === "admin" ? "/admin" : "/home"}
+            href={homeFor(user.role)}
             className="min-w-0 flex-1"
             onClick={() => setOpen(false)}
             title="Kuro"
@@ -334,7 +370,7 @@ export function AppShell({
                       {user.name}
                     </span>
                     <span className="block text-[11px] font-semibold uppercase tracking-wide text-ink-400">
-                      {user.role === "admin" ? "Admin" : "Freelancer"}
+                      {ROLE_LABELS[user.role]}
                     </span>
                   </span>
                 </button>

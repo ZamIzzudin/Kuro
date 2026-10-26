@@ -1,9 +1,10 @@
-// /api/sprints/:id — GET detail & PATCH (admin: ubah field / transisi status)
+// /api/sprints/:id — GET detail & PATCH (admin & project manager: ubah field / transisi status)
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { closeSprint, findSprint, mapSprint, SPRINT_INCLUDE, sprintCounts } from '@/lib/sprints'
 import { dateOnlyUTC } from '@/lib/time'
 import { sprintCompleteSchema, sprintUpdateSchema } from '@/lib/validators'
@@ -28,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, sprintUpdateSchema)
@@ -118,7 +119,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
 // POST /api/sprints/:id — tutup sprint (carry-over task belum selesai ke backlog/sprint lain)
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, sprintCompleteSchema)
@@ -155,7 +156,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const sprint = await findSprint(params.id)

@@ -17,17 +17,20 @@ export const resetPasswordSchema = z.object({
 
 // ===== Fase 1: Users & Masters =====
 
+/** Role aplikasi: admin, project_manager, freelancer */
+export const roleSchema = z.enum(['admin', 'project_manager', 'freelancer'])
+
 export const userCreateSchema = z.object({
   name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100),
   email: z.string().trim().toLowerCase().email('Email tidak valid'),
   password: z.string().min(8, 'Password minimal 8 karakter'),
-  role: z.enum(['admin', 'freelancer']),
+  role: roleSchema,
 })
 
 export const userUpdateSchema = z
   .object({
     name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100).optional(),
-    role: z.enum(['admin', 'freelancer']).optional(),
+    role: roleSchema.optional(),
     isActive: z.boolean().optional(),
   })
   .refine((v) => v.name !== undefined || v.role !== undefined || v.isActive !== undefined, {

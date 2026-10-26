@@ -7,13 +7,14 @@ import { Button, ErrorNote, FieldLabel, IconButton, Input, Select, Spinner, Succ
 import { Sheet } from '@/components/sheet'
 import { RoleBadge, StatusBadge } from '@/components/pills'
 import { apiSend, fetcher } from '@/lib/client'
+import { ROLE_LABELS, ROLES, type Role } from '@/lib/roles'
 import { formatDateWIB } from '@/lib/time'
 
 type UserRow = {
   id: string
   name: string
   email: string
-  role: 'admin' | 'freelancer'
+  role: Role
   isActive: boolean
   createdAt: string
 }
@@ -137,7 +138,12 @@ export function UsersClient() {
 }
 
 function CreateSheet({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'freelancer' })
+  const [form, setForm] = useState<{ name: string; email: string; password: string; role: Role }>({
+    name: '',
+    email: '',
+    password: '',
+    role: 'freelancer',
+  })
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -198,10 +204,13 @@ function CreateSheet({ open, onClose, onDone }: { open: boolean; onClose: () => 
           <Select
             id="u-role"
             value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
           >
-            <option value="freelancer">Freelancer</option>
-            <option value="admin">Admin</option>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
           </Select>
         </div>
         {error && <ErrorNote>{error}</ErrorNote>}
@@ -220,7 +229,7 @@ function CreateSheet({ open, onClose, onDone }: { open: boolean; onClose: () => 
 
 function EditSheet({ user, onClose, onDone }: { user: UserRow | null; onClose: () => void; onDone: () => void }) {
   const [name, setName] = useState('')
-  const [role, setRole] = useState<'admin' | 'freelancer'>('freelancer')
+  const [role, setRole] = useState<Role>('freelancer')
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [current, setCurrent] = useState<UserRow | null>(null)
@@ -258,9 +267,12 @@ function EditSheet({ user, onClose, onDone }: { user: UserRow | null; onClose: (
         </div>
         <div>
           <FieldLabel htmlFor="e-role">Role</FieldLabel>
-          <Select id="e-role" value={role} onChange={(e) => setRole(e.target.value as 'admin' | 'freelancer')}>
-            <option value="freelancer">Freelancer</option>
-            <option value="admin">Admin</option>
+          <Select id="e-role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROLE_LABELS[r]}
+              </option>
+            ))}
           </Select>
         </div>
         {error && <ErrorNote>{error}</ErrorNote>}

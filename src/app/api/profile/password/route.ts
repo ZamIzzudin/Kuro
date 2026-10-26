@@ -10,7 +10,7 @@ import { SESSION_COOKIE, hashToken, requireApiUser } from '@/lib/auth'
 import { changePasswordSchema } from '@/lib/validators'
 
 export async function POST(req: Request) {
-  const { user, error } = await requireApiUser(['admin', 'freelancer'])
+  const { user, error } = await requireApiUser(['admin', 'project_manager', 'freelancer'])
   if (error) return error
 
   const parsed = await parseJson(req, changePasswordSchema)

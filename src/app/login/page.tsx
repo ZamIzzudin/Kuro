@@ -30,8 +30,9 @@ export default function LoginPage() {
       // Hanya izinkan path internal (cegah open redirect: '//evil.com', '/\evil.com')
       const safeNext =
         next && /^\/(?!\/)/.test(next) && !next.startsWith("/\\") ? next : null;
-      const target =
-        safeNext ?? (data.user?.role === "admin" ? "/admin" : "/home");
+      const isAdminTier =
+        data.user?.role === "admin" || data.user?.role === "project_manager";
+      const target = safeNext ?? (isAdminTier ? "/admin" : "/home");
       window.location.href = target;
     } catch {
       setError("Terjadi kesalahan jaringan.");

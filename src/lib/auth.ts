@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { db } from './db'
+import type { Role } from './roles'
 
 export const SESSION_COOKIE = 'kuro_session'
 export const SESSION_HOURS = 8
@@ -17,7 +18,7 @@ export type SessionUser = {
   email: string
   name: string
   username: string | null
-  role: 'admin' | 'freelancer'
+  role: Role
   avatarUrl: string | null
 }
 
@@ -32,7 +33,7 @@ export function publicUser(u: {
   email: string
   name: string
   username?: string | null
-  role: 'admin' | 'freelancer'
+  role: Role
   avatarKey?: string | null
 }): SessionUser {
   return {
@@ -94,7 +95,7 @@ export async function destroySession() {
 }
 
 /** Guard RBAC untuk API routes — role dicek di API, bukan hanya UI (RANCANGAN §8) */
-export async function requireApiUser(roles?: Array<'admin' | 'freelancer'>) {
+export async function requireApiUser(roles?: ReadonlyArray<Role>) {
   const user = await getSessionUser()
   if (!user) {
     return {

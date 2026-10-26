@@ -1,10 +1,11 @@
-// /api/users — GET (daftar) & POST (buat) — admin only
+// /api/users — GET (daftar, admin & project manager) & POST (buat, admin only)
 import bcrypt from 'bcryptjs'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { userCreateSchema } from '@/lib/validators'
 
 const PUBLIC_FIELDS = {
@@ -18,7 +19,7 @@ const PUBLIC_FIELDS = {
 } as const
 
 export async function GET() {
-  const { error } = await requireApiUser(['admin'])
+  const { error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const users = await db.user.findMany({

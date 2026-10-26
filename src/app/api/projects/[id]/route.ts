@@ -1,11 +1,12 @@
 // /api/projects/:id — detail & ubah project (enhancement)
 // GET   : semua login (freelancer hanya bila project aktif & dia member)
-// PATCH : admin only
+// PATCH : admin & project manager
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson, prismaError } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { findProject, mapProject, setProjectRelations, validateProjectRelations } from '@/lib/projects'
 import { StorageNotConfiguredError, isStorageConfigured, removeObject } from '@/lib/storage'
 import { projectDeleteSchema, projectUpdateSchema } from '@/lib/validators'
@@ -30,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, projectUpdateSchema)
@@ -107,13 +108,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 }
 
-// DELETE /api/projects/:id — hapus project BESERTA seluruh datanya (admin only).
+// DELETE /api/projects/:id — hapus project BESERTA seluruh datanya (admin & project manager).
 // Wajib mengetikkan nama project persis sebagai konfirmasi. Skema tidak memakai
 // onDelete cascade pada relasi Task/TimeEntry/Correction, jadi pembersihan
 // dilakukan berurutan di dalam transaksi, lalu objek MinIO (banner + lampiran)
 // dihapus best-effort setelah transaksi sukses.
 export async function DELETE(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(['admin'])
+  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const parsed = await parseJson(req, projectDeleteSchema)

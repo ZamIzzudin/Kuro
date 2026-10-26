@@ -8,7 +8,8 @@ import { TIME_ENTRY_INCLUDE, mapTimeEntry } from '@/lib/time-entries'
 import { wibLocalToDate } from '@/lib/time'
 
 export async function GET(req: Request) {
-  const { user, error } = await requireApiUser()
+  // Rekap-style data: Admin (semua) & freelancer (miliknya). Project Manager tidak.
+  const { user, error } = await requireApiUser(['admin', 'freelancer'])
   if (error) return error
 
   const sp = new URL(req.url).searchParams

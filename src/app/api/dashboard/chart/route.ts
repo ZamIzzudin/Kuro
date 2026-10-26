@@ -1,10 +1,11 @@
 // GET /api/dashboard/chart?days=30 — jam kerja harian per user (default 30 hari)
 import { NextResponse } from 'next/server'
 import { requireApiUser } from '@/lib/auth'
+import { ADMIN_ROLES } from '@/lib/roles'
 import { getWorkChart } from '@/lib/dashboard'
 
 export async function GET(req: Request) {
-  const { error } = await requireApiUser(['admin'])
+  const { error } = await requireApiUser(ADMIN_ROLES)
   if (error) return error
 
   const raw = new URL(req.url).searchParams.get('days')

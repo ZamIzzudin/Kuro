@@ -13,6 +13,7 @@ import {
   taskCreateSchema,
   taskUpdateSchema,
   timeEntryEditSchema,
+  userCreateSchema,
 } from '../src/lib/validators.ts'
 
 test('clockOutSchema: note wajib >= 10 karakter (rule #9)', () => {
@@ -212,4 +213,15 @@ test('projectDeleteSchema: wajib mengirim confirmName', () => {
   assert.equal(projectDeleteSchema.safeParse({ confirmName: '' }).success, false)
   assert.equal(projectDeleteSchema.safeParse({ confirmName: '   ' }).success, false)
   assert.equal(projectDeleteSchema.safeParse({}).success, false)
+})
+
+test('userCreateSchema: menerima tiga role, menolak role tak dikenal', () => {
+  const base = { name: 'Budi', email: 'budi@notu.local', password: 'password123' }
+  assert.equal(userCreateSchema.safeParse({ ...base, role: 'admin' }).success, true)
+  assert.equal(userCreateSchema.safeParse({ ...base, role: 'project_manager' }).success, true)
+  assert.equal(userCreateSchema.safeParse({ ...base, role: 'freelancer' }).success, true)
+  // role lama/spoof → gagal
+  assert.equal(userCreateSchema.safeParse({ ...base, role: 'superadmin' }).success, false)
+  assert.equal(userCreateSchema.safeParse({ ...base, role: 'project-manager' }).success, false)
+  assert.equal(userCreateSchema.safeParse({ ...base, role: '' }).success, false)
 })

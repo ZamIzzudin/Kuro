@@ -1,10 +1,11 @@
-// Handler generik untuk master data (Jenis Pekerjaan / Requester) — admin only.
+// Handler generik untuk master data (Jenis Pekerjaan / Requester) — admin & project manager.
 // Dipakai oleh /api/work-types & /api/requesters. (Project punya route sendiri.)
 import { NextResponse } from 'next/server'
 import { db } from './db'
 import { logActivity } from './activity'
 import { parseJson, prismaError } from './api-helpers'
 import { requireApiUser } from './auth'
+import { ADMIN_ROLES, hasAdminAccess } from './roles'
 import { masterCreateSchema, masterUpdateSchema } from './validators'
 
 type MasterKey = 'workType' | 'requester'
@@ -50,15 +51,15 @@ export function masterHandlers(key: MasterKey) {
       const { user, error } = await requireApiUser()
       if (error) return error
       const items =
-        user.role === 'admin'
+        hasAdminAccess(user.role)
           ? await model.findMany({ orderBy: { name: 'asc' } })
           : await model.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } })
       return NextResponse.json({ items })
     },
 
-    /** POST — tambah item baru (admin; requester hanya admin — Q6) */
+    /** POST — tambah item baru (admin & project manager; requester hanya admin — Q6) */
     async POST(req: Request) {
-      const { user: admin, error } = await requireApiUser(['admin'])
+      const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
       if (error) return error
 
       const parsed = await parseJson(req, masterCreateSchema)
@@ -86,7 +87,7 @@ export function masterHandlers(key: MasterKey) {
 
     /** PATCH — rename / aktif-nonaktifkan */
     async PATCH(req: Request, { params }: { params: { id: string } }) {
-      const { user: admin, error } = await requireApiUser(['admin'])
+      const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
       if (error) return error
 
       const parsed = await parseJson(req, masterUpdateSchema)
