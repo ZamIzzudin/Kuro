@@ -291,6 +291,14 @@ export const taskStatusSchema = z.object({
   status: z.enum(TASK_STATUS_OPTIONS, { errorMap: () => ({ message: 'Status tidak valid' }) }),
 })
 
+/** Buat task REVISI dari task yang sudah done/review — detail disalin, status jadi To Do. */
+export const taskRevisionSchema = z.object({
+  // Catatan alasan revisi (opsional, ditampilkan di detail task revisi).
+  note: z.string().trim().max(1000, 'Catatan revisi maksimal 1000 karakter').optional().nullable(),
+  // Sprint tujuan task revisi; kosong = Backlog (agar bisa diambil di sprint berikutnya).
+  sprintId: z.string().min(1).optional().nullable(),
+})
+
 // ===== Subtask (unit kerja) =====
 
 /** Freelancer mengubah status subtask miliknya (setara done-lock lama) */

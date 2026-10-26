@@ -15,6 +15,7 @@ export type ActivityAction =
   | 'task_updated'
   | 'task_assigned'
   | 'task_status_changed'
+  | 'task_revision_created'
   | 'subtask_created'
   | 'subtask_updated'
   | 'subtask_deleted'

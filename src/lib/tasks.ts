@@ -23,6 +23,12 @@ export const TASK_INCLUDE = {
   assignees: { include: { user: { select: { id: true, name: true } } } },
   attachments: { orderBy: { createdAt: 'asc' } },
   subtasks: { include: SUBTASK_INCLUDE, orderBy: { position: 'asc' } },
+  // Relasi revisi: task asal (bila ini revisi) & daftar revisi turunannya.
+  revisionOf: { select: { id: true, title: true, status: true } },
+  revisions: {
+    select: { id: true, title: true, status: true, sprintId: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  },
 } satisfies Prisma.TaskInclude
 
 type SubtaskWithRelations = Prisma.SubtaskGetPayload<{ include: typeof SUBTASK_INCLUDE }>
@@ -72,6 +78,14 @@ export type TaskItem = {
   /** Lampiran brief/referensi level task */
   attachments: AttachmentItem[]
   subtasks: SubtaskItem[]
+  /** task ini lahir sebagai revisi dari task lain */
+  isRevision: boolean
+  /** catatan alasan revisi (diisi admin) */
+  revisionNote: string | null
+  /** task asal yang direvisi (null bila task biasa) */
+  revisionOf: { id: string; title: string; status: TaskStatus } | null
+  /** daftar task revisi yang lahir dari task ini */
+  revisions: Array<{ id: string; title: string; status: TaskStatus; sprintId: string | null; createdAt: string }>
   /** Total menit dari semua subtask (entry selesai) */
   loggedMinutes: number
   /** deadline lewat & belum done/cancelled (rule #10, runtime) */
@@ -144,6 +158,18 @@ export function mapTask(t: TaskWithRelations, now = new Date()): TaskItem {
     assignees: t.assignees.map((a) => ({ id: a.user.id, name: a.user.name })),
     attachments: t.attachments.map(mapAttachment),
     subtasks,
+    isRevision: t.isRevision,
+    revisionNote: t.revisionNote,
+    revisionOf: t.revisionOf
+      ? { id: t.revisionOf.id, title: t.revisionOf.title, status: t.revisionOf.status }
+      : null,
+    revisions: t.revisions.map((r) => ({
+      id: r.id,
+      title: r.title,
+      status: r.status,
+      sprintId: r.sprintId,
+      createdAt: r.createdAt.toISOString(),
+    })),
     loggedMinutes,
     overdue: t.deadlineAt < now && t.status !== 'done' && t.status !== 'cancelled',
     // Peringatan: deadline task melewati tanggal selesai sprint

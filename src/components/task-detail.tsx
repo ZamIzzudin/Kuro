@@ -3,11 +3,11 @@
 // Sheet detail TASK — level "cerita": metadata bisnis, brief/lampiran, daftar assignee,
 // dan daftar subtask (unit kerja). Dipakai dari daftar task admin.
 import useSWR from 'swr'
-import { CalendarDays, Clock, FileText, FolderKanban, Layers, User, UserCheck } from 'lucide-react'
+import { CalendarDays, Clock, FileText, FolderKanban, GitBranch, History, Layers, User, UserCheck } from 'lucide-react'
 import { Sheet } from '@/components/sheet'
 import { ErrorNote, Spinner } from '@/components/ui'
 import { AttachmentList, formatBytes } from '@/components/attachment'
-import { OverdueBadge, PriorityBadge, StatusPill, TaskProgress } from '@/components/task-bits'
+import { OverdueBadge, PriorityBadge, RevisionBadge, StatusPill, TaskProgress } from '@/components/task-bits'
 import { Markdown } from '@/components/markdown'
 import { fetcher } from '@/lib/client'
 import { formatMinutes, formatWIB } from '@/lib/time'
@@ -17,11 +17,14 @@ export function TaskDetailSheet({
   taskId,
   fallback,
   onClose,
+  onOpenTask,
 }: {
   taskId: string
   /** Data yang sudah dimiliki pemanggil (opsional) — dipakai sebagai tampilan awal. */
   fallback?: TaskItem | null
   onClose: () => void
+  /** Buka detail task lain (mis. task revisi / task asal revisi). */
+  onOpenTask?: (taskId: string) => void
 }) {
   const { data, isLoading, error } = useSWR<{ task: TaskItem }>(`/api/tasks/${taskId}`, fetcher)
   const task = data?.task ?? fallback ?? null
@@ -41,6 +44,7 @@ export function TaskDetailSheet({
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={task.status} />
             <PriorityBadge priority={task.priority} />
+            {task.isRevision && <RevisionBadge />}
             {task.overdue && <OverdueBadge />}
             {task.sprint ? (
               <span className="rounded-full bg-brand-soft px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
@@ -87,6 +91,52 @@ export function TaskDetailSheet({
               {task.estimatedHours === null ? '' : ` dari estimasi ${task.estimatedHours} jam`}
             </p>
           </div>
+
+          {(task.revisionOf || task.revisions.length > 0 || task.revisionNote) && (
+            <div className="rounded-lg border border-brand-1/20 bg-brand-soft/40 p-4">
+              <h4 className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold uppercase tracking-wide text-brand-1">
+                <History className="h-3.5 w-3.5" /> Revisi
+              </h4>
+              {task.revisionOf && (
+                <InfoRow icon={<GitBranch className="h-3.5 w-3.5" />} label="Direvisi dari">
+                  <button
+                    type="button"
+                    onClick={() => onOpenTask?.(task.revisionOf!.id)}
+                    className="text-left font-bold text-brand-1 hover:underline"
+                  >
+                    {task.revisionOf.title}
+                  </button>
+                </InfoRow>
+              )}
+              {task.revisionNote && (
+                <div className="mt-2">
+                  <dt className="text-[11.5px] font-bold uppercase tracking-wide text-ink-400">Catatan revisi</dt>
+                  <dd className="mt-0.5 whitespace-pre-wrap text-[13px] text-ink-700">{task.revisionNote}</dd>
+                </div>
+              )}
+              {task.revisions.length > 0 && (
+                <div className="mt-3">
+                  <dt className="mb-1 text-[11.5px] font-bold uppercase tracking-wide text-ink-400">
+                    Menghasilkan {task.revisions.length} task revisi
+                  </dt>
+                  <ul className="divide-y divide-line-soft rounded-md border border-line bg-surface">
+                    {task.revisions.map((r) => (
+                      <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => onOpenTask?.(r.id)}
+                          className="min-w-0 truncate text-left text-[13px] font-bold text-ink-900 hover:text-brand-1"
+                        >
+                          {r.title}
+                        </button>
+                        <StatusPill status={r.status} />
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
 
           {task.description && (
             <div>

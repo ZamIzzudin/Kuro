@@ -48,6 +48,25 @@ export function OverdueBadge() {
   )
 }
 
+/** Badge penanda task lahir sebagai REVISI dari task lain. */
+export function RevisionBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
+      Revisi
+    </span>
+  )
+}
+
+/** Badge ringkas berapa task revisi yang lahir dari task ini. */
+export function RevisionCountBadge({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
+      {count} revisi
+    </span>
+  )
+}
+
 /** Progress tercatat vs estimasi (menit, rule #4: pembulatan ke bawah) */
 export function TaskProgress({
   loggedMinutes,

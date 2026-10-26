@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ArrowLeft, Ban, Eye, Layers, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Ban, Eye, Layers, Pencil, Plus, RotateCcw, Trash2, UserPlus } from "lucide-react";
 import type { Priority, TaskStatus } from "@prisma/client";
 import {
   Button,
@@ -13,6 +13,7 @@ import {
   Input,
   Select,
   Spinner,
+  Textarea,
   Tooltip,
 } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
@@ -27,6 +28,8 @@ import { MarkdownEditor } from "@/components/markdown-editor";
 import {
   OverdueBadge,
   PriorityBadge,
+  RevisionBadge,
+  RevisionCountBadge,
   STATUS_META,
   StatusPill,
 } from "@/components/task-bits";
@@ -92,6 +95,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
     null,
   );
   const [cancelFor, setCancelFor] = useState<TaskItem | null>(null);
+  const [revisionFor, setRevisionFor] = useState<TaskItem | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
 
@@ -337,6 +341,12 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                       <PriorityBadge priority={t.priority} />
                       <span>{t.workType.name}</span>
                     </div>
+                    {(t.isRevision || t.revisions.length > 0) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        {t.isRevision && <RevisionBadge />}
+                        <RevisionCountBadge count={t.revisions.length} />
+                      </div>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     {t.sprint ? (
@@ -392,6 +402,13 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                         icon={<Pencil className="h-4 w-4" />}
                         onClick={() => setFormTarget(t)}
                       />
+                      {(t.status === "done" || t.status === "review") && (
+                        <IconButton
+                          label="Buat Revisi"
+                          icon={<RotateCcw className="h-4 w-4" />}
+                          onClick={() => setRevisionFor(t)}
+                        />
+                      )}
                       {t.status !== "cancelled" && t.status !== "done" && (
                         <IconButton
                           label="Batalkan"
@@ -435,10 +452,19 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
         onError={setRowError}
       />
 
+      <RevisionSheet
+        task={revisionFor}
+        sprints={sprints}
+        onClose={() => setRevisionFor(null)}
+        onDone={() => tasksReq.mutate()}
+        onError={setRowError}
+      />
+
       {detailId && (
         <TaskDetailSheet
           taskId={detailId}
           fallback={tasks.find((t) => t.id === detailId) ?? null}
+          onOpenTask={setDetailId}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -954,6 +980,111 @@ function CancelSheet({
           </Button>
           <Button variant="danger" loading={saving} onClick={confirm}>
             Ya, Batalkan
+          </Button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * Buat task REVISI dari task yang sudah done/review.
+ * Task lama tetap Done; task baru berstatus To Do agar bisa diambil pada sprint
+ * berikutnya. Detail disalin apa adanya — admin lalu mengubah yang perlu direvisi.
+ */
+function RevisionSheet({
+  task,
+  sprints,
+  onClose,
+  onDone,
+  onError,
+}: {
+  task: TaskItem | null;
+  sprints: SprintItem[];
+  onClose: () => void;
+  onDone: () => void;
+  onError: (msg: string | null) => void;
+}) {
+  const [note, setNote] = useState("");
+  const [sprintId, setSprintId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fromReview = task?.status === "review";
+
+  async function confirm() {
+    if (!task) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSend(`/api/tasks/${task.id}/revisions`, "POST", {
+        note: note.trim() || null,
+        sprintId: sprintId || null,
+      });
+      onDone();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gagal membuat revisi";
+      setError(msg);
+      onError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Sheet open={!!task} onClose={onClose} title="Buat Task Revisi">
+      <div className="space-y-4">
+        <div className="rounded-lg border border-brand-1/20 bg-brand-soft/40 px-4 py-3">
+          <p className="text-[13px] font-bold text-ink-900">{task?.title}</p>
+          <p className="mt-1 text-[12.5px] text-ink-500">
+            Dibuat sebagai <span className="font-bold">task baru</span> berstatus{" "}
+            <span className="font-bold">To Do</span> dengan detail yang disalin dari task ini.
+            {fromReview && " Task ini akan dinaikkan menjadi Done."}
+          </p>
+        </div>
+
+        <div>
+          <FieldLabel htmlFor="rev-note">Catatan revisi (opsional)</FieldLabel>
+          <Textarea
+            id="rev-note"
+            rows={4}
+            maxLength={1000}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Apa yang perlu direvisi? (mis. warna tombol kurang kontras, copy berubah)"
+          />
+        </div>
+
+        <div>
+          <FieldLabel htmlFor="rev-sprint">Sprint task revisi</FieldLabel>
+          <Select
+            id="rev-sprint"
+            value={sprintId}
+            onChange={(e) => setSprintId(e.target.value)}
+          >
+            <option value="">Backlog (bisa diambil pada sprint berikutnya)</option>
+            {sprints.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name} · {s.status}
+              </option>
+            ))}
+          </Select>
+        </div>
+
+        {task && task.subtasks.length > 0 && (
+          <p className="text-[12.5px] text-ink-500">
+            {task.subtasks.length} subtask akan disalin dengan status To Do.
+          </p>
+        )}
+
+        {error && <ErrorNote>{error}</ErrorNote>}
+        <div className="flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button variant="primary" loading={saving} onClick={confirm}>
+            Buat Revisi
           </Button>
         </div>
       </div>

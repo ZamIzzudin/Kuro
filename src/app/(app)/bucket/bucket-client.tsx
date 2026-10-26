@@ -9,7 +9,7 @@ import useSWR from "swr";
 import { ArrowRight, CalendarDays, FolderKanban } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 import { ErrorNote, Select, Spinner } from "@/components/ui";
-import { OverdueBadge, PriorityBadge, STATUS_META } from "@/components/task-bits";
+import { OverdueBadge, PriorityBadge, RevisionBadge, STATUS_META } from "@/components/task-bits";
 import { SubtaskDetailSheet } from "@/components/subtask-detail";
 import { useProjectScope } from "@/components/project-scope";
 import { apiSend, fetcher } from "@/lib/client";
@@ -24,7 +24,7 @@ type Scope = "active" | "backlog";
 
 type Card = {
   subtask: SubtaskItem;
-  task: Pick<TaskItem, "id" | "title" | "priority" | "deadlineAt" | "overdue" | "workType" | "requester" | "project">;
+  task: Pick<TaskItem, "id" | "title" | "priority" | "deadlineAt" | "overdue" | "workType" | "requester" | "project" | "isRevision">;
 };
 
 export function BucketClient() {
@@ -63,6 +63,7 @@ export function BucketClient() {
             workType: t.workType,
             requester: t.requester,
             project: t.project,
+            isRevision: t.isRevision,
           },
         })),
       ),
@@ -323,6 +324,7 @@ function SubtaskCard({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <PriorityBadge priority={task.priority} />
+        {task.isRevision && <RevisionBadge />}
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-500">
           <CalendarDays className="h-3.5 w-3.5" />
           {formatDateShortWIB(task.deadlineAt)}
