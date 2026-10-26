@@ -18,6 +18,9 @@ pw-run.log
 # template Excel (artefak dev, regenerate: npm run template:tasks)
 /templates/
 
+# backup data (mengandung hash password — jangan pernah di-commit)
+/backup/
+
 # next.js
 /.next/
 /out/
