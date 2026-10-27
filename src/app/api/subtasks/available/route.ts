@@ -1,6 +1,13 @@
-// GET /api/subtasks/available — subtask yang boleh dikerjakan freelancer.
-// Hanya task di SPRINT AKTIF (backlog di luar scope), dan subtask belum done/cancelled
-// yang berada dalam jangkauan user (miliknya / bucket bersama).
+// GET /api/subtasks/available — subtask yang boleh dilihat/dikerjakan freelancer.
+//
+// Query:
+// - projectId  : batasi ke satu project ('all'/kosong = semua)
+// - scope      : 'active' (default) = sprint aktif; 'backlog' = di luar sprint
+// - includeDone: '1' = ikutkan subtask Done (dipakai papan kanban bucket)
+//
+// Scope freelancer (rule #12): hanya subtask miliknya ATAU subtask unassigned yang
+// boleh ia ambil (task di pool assignee-nya / project tempat ia member). Subtask milik
+// freelancer lain TIDAK pernah muncul di sini.
 import type { Prisma } from '@prisma/client'
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -13,16 +20,24 @@ export async function GET(req: Request) {
 
   const sp = new URL(req.url).searchParams
   const projectId = sp.get('projectId')
+  const scope = sp.get('scope') === 'backlog' ? 'backlog' : 'active'
+  const includeDone = sp.get('includeDone') === '1'
+
+  const taskFilter: Prisma.TaskWhereInput = {
+    status: { not: 'cancelled' },
+    ...(scope === 'backlog' ? { sprintId: null } : { sprint: { status: 'active' } }),
+  }
+
+  if (projectId && projectId !== 'all') taskFilter.projectId = projectId
 
   const where: Prisma.SubtaskWhereInput = {
-    status: { notIn: ['done', 'cancelled'] },
-    task: { sprint: { status: 'active' } },
+    status: includeDone ? { not: 'cancelled' } : { notIn: ['done', 'cancelled'] },
+    task: taskFilter,
   }
 
   if (user.role === 'freelancer') {
     Object.assign(where, freelancerSubtaskScope(user.id))
   }
-  if (projectId && projectId !== 'all') where.task = { ...(where.task as object), projectId }
 
   const rows = await db.subtask.findMany({
     where,
@@ -40,6 +55,7 @@ export async function GET(req: Request) {
     orderBy: [{ task: { priority: 'asc' } }, { position: 'asc' }],
   })
 
+  const now = new Date()
   const subtasks = rows.map((s) => ({
     ...mapSubtask(s),
     task: {
@@ -47,7 +63,8 @@ export async function GET(req: Request) {
       title: s.task.title,
       priority: s.task.priority,
       deadlineAt: s.task.deadlineAt.toISOString(),
-      overdue: s.task.deadlineAt < new Date() && s.task.status !== 'done' && s.task.status !== 'cancelled',
+      overdue: s.task.deadlineAt < now && s.task.status !== 'done' && s.task.status !== 'cancelled',
+      isRevision: s.task.isRevision,
       project: s.task.project,
       workType: s.task.workType,
       requester: s.task.requester,

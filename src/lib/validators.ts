@@ -244,6 +244,8 @@ export const subtaskUpdateSchema = z
     assigneeId: z.string().min(1).optional().nullable(),
     estimatedHours: estimatedHoursField.optional().nullable(),
     position: z.number().int().min(0).max(9999).optional(),
+    // Admin boleh mengubah status subtask termasuk membatalkan (cancelled).
+    status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
     addAttachments: z.array(attachmentInputSchema).max(50).optional(),
     removeAttachmentIds: z.array(z.string().min(1)).max(100).optional(),
   })

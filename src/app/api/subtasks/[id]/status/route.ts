@@ -3,10 +3,11 @@
 // Status task tidak lagi diubah dari sini — task adalah container.
 import type { TaskStatus } from '@prisma/client'
 import { NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
+import { syncTaskStatusFromSubtasks } from '@/lib/task-status'
 import { STATUS_LABEL } from '@/lib/time-entries'
 import { subtaskStatusSchema } from '@/lib/validators'
 
@@ -59,14 +60,19 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const claimed = claimable
-  const updated = await db.subtask.update({
-    where: { id: params.id },
-    data: {
-      status: status as TaskStatus,
-      ...(claimed ? { assigneeId: user.id } : {}),
-    },
-    include: { assignee: { select: { id: true, name: true } } },
-  })
+  const updated = await db.$transaction(async (tx) => {
+    const row = await tx.subtask.update({
+      where: { id: params.id },
+      data: {
+        status: status as TaskStatus,
+        ...(claimed ? { assigneeId: user.id } : {}),
+      },
+      include: { assignee: { select: { id: true, name: true } } },
+    })
+    // Status tugas induk mengikuti status subtask.
+    await syncTaskStatusFromSubtasks(tx, subtask.taskId)
+    return row
+  }, TX_OPTIONS)
 
   if (claimed) {
     await logActivity({

@@ -1,8 +1,10 @@
 "use client";
 
 // Task Bucket freelancer — papan SUBTASK (unit kerja) dalam project terpilih.
-// Dua scope: Sprint Aktif (default) dan Backlog. Freelancer hanya bisa mengerjakan
-// subtask di sprint aktif; kartu backlog ditampilkan read-only sebagai informasi.
+// Hanya menampilkan subtask yang berada dalam jangkauan freelancer ini:
+// subtask miliknya ATAU subtask tanpa assignee yang bisa ia ambil (bucket bersama).
+// Subtask milik freelancer lain tidak pernah muncul di sini.
+// Dua scope: Sprint Aktif (default, bisa dikerjakan) dan Backlog (read-only).
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
@@ -22,9 +24,11 @@ const COLUMNS: TaskStatus[] = ["todo", "in_progress", "review", "done"];
 
 type Scope = "active" | "backlog";
 
-type Card = {
-  subtask: SubtaskItem;
-  task: Pick<TaskItem, "id" | "title" | "priority" | "deadlineAt" | "overdue" | "workType" | "requester" | "project" | "isRevision">;
+type AvailableSubtask = SubtaskItem & {
+  task: Pick<
+    TaskItem,
+    "id" | "title" | "priority" | "deadlineAt" | "overdue" | "isRevision" | "workType" | "requester" | "project"
+  >;
 };
 
 export function BucketClient() {
@@ -32,8 +36,10 @@ export function BucketClient() {
   const me = useSWR<{ user: { id: string } | null }>("/api/auth/me", fetcher);
 
   const [scope, setScope] = useState<Scope>("active");
-  const tasksReq = useSWR<{ tasks: TaskItem[] }>(
-    projectId ? `/api/tasks?projectId=${projectId}&sprintId=${scope}` : null,
+  const subsReq = useSWR<{ subtasks: AvailableSubtask[] }>(
+    projectId
+      ? `/api/subtasks/available?projectId=${projectId}&scope=${scope}&includeDone=1`
+      : null,
     fetcher,
   );
 
@@ -46,46 +52,26 @@ export function BucketClient() {
 
   const myId = me.data?.user?.id;
   const project: ProjectItem | undefined = projects.find((p) => p.id === projectId);
-  const tasks = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data]);
+  const subtasks = useMemo(() => subsReq.data?.subtasks ?? [], [subsReq.data]);
 
-  // Ratakan subtask menjadi kartu kanban (satu kartu = satu subtask)
-  const cards: Card[] = useMemo(
-    () =>
-      tasks.flatMap((t) =>
-        t.subtasks.map((s) => ({
-          subtask: s,
-          task: {
-            id: t.id,
-            title: t.title,
-            priority: t.priority,
-            deadlineAt: t.deadlineAt,
-            overdue: t.overdue,
-            workType: t.workType,
-            requester: t.requester,
-            project: t.project,
-            isRevision: t.isRevision,
-          },
-        })),
-      ),
-    [tasks],
-  );
-
-  const canDrag = (c: Card) =>
+  // Hanya subtask milik saya atau belum berassignee (bisa diambil) yang bisa digeser,
+  // dan hanya pada sprint aktif.
+  const canDrag = (s: AvailableSubtask) =>
     scope === "active" &&
-    c.subtask.status !== "done" &&
-    c.subtask.status !== "cancelled" &&
-    (c.subtask.assigneeId === null || c.subtask.assigneeId === myId);
+    s.status !== "done" &&
+    s.status !== "cancelled" &&
+    (s.assigneeId === null || s.assigneeId === myId);
 
-  const filtered = cards.filter(
-    (c) => c.subtask.status !== "cancelled" && (fPriority === "all" || c.task.priority === fPriority),
+  const filtered = subtasks.filter(
+    (s) => s.status !== "cancelled" && (fPriority === "all" || s.task.priority === fPriority),
   );
 
-  async function changeStatus(card: Card, status: string) {
-    setBusyId(card.subtask.id);
+  async function changeStatus(s: AvailableSubtask, status: string) {
+    setBusyId(s.id);
     setError(null);
     try {
-      await apiSend(`/api/subtasks/${card.subtask.id}/status`, "PATCH", { status });
-      await tasksReq.mutate();
+      await apiSend(`/api/subtasks/${s.id}/status`, "PATCH", { status });
+      await subsReq.mutate();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal mengubah status");
     } finally {
@@ -95,10 +81,10 @@ export function BucketClient() {
 
   function dropTo(col: TaskStatus) {
     setOverCol(null);
-    const card = cards.find((c) => c.subtask.id === dragId);
+    const s = subtasks.find((x) => x.id === dragId);
     setDragId(null);
-    if (!card || !canDrag(card) || card.subtask.status === col || busyId) return;
-    changeStatus(card, col);
+    if (!s || !canDrag(s) || s.status === col || busyId) return;
+    changeStatus(s, col);
   }
 
   if (hasNone) {
@@ -167,32 +153,32 @@ export function BucketClient() {
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
-      {tasksReq.error && (
+      {subsReq.error && (
         <div className="mt-4">
-          <ErrorNote>{tasksReq.error instanceof Error ? tasksReq.error.message : "Gagal memuat task"}</ErrorNote>
+          <ErrorNote>{subsReq.error instanceof Error ? subsReq.error.message : "Gagal memuat subtask"}</ErrorNote>
         </div>
       )}
 
-      {scopeLoading || !projectId || tasksReq.isLoading ? (
+      {scopeLoading || !projectId || subsReq.isLoading ? (
         <div className="flex items-center justify-center py-24 text-ink-400">
-          <Spinner /> <span className="ml-3 text-sm font-semibold">Memuat task…</span>
+          <Spinner /> <span className="ml-3 text-sm font-semibold">Memuat subtask…</span>
         </div>
       ) : filtered.length === 0 ? (
         <div className="mt-6 rounded-xl border border-line bg-surface py-20 text-center shadow-sm">
           <FolderKanban className="mx-auto h-8 w-8 text-ink-300" />
           <p className="mt-3 font-heading text-[16px] font-bold text-ink-900">
-            {scope === "backlog" ? "Backlog kosong" : "Belum ada subtask di sprint aktif"}
+            {scope === "backlog" ? "Backlog kosong" : "Belum ada subtask untuk Anda di sprint aktif"}
           </p>
           <p className="mx-auto mt-1.5 max-w-sm text-sm text-ink-500">
             {scope === "backlog"
               ? "Semua task sudah masuk sprint."
-              : "Subtask akan muncul setelah admin memasukkannya ke sprint aktif."}
+              : "Subtask akan muncul setelah admin memasukkannya ke sprint aktif dan menugaskannya ke Anda (atau membiarkannya bisa diambil)."}
           </p>
         </div>
       ) : (
-        <div className={`mt-6 grid gap-4 ${COLUMNS.length === 1 ? "grid-cols-1" : "md:grid-cols-2 xl:grid-cols-4"}`}>
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {COLUMNS.map((col) => {
-            const items = filtered.filter((c) => c.subtask.status === col);
+            const items = filtered.filter((s) => s.status === col);
             const isOver = overCol === col && dragId !== null;
             return (
               <section
@@ -238,20 +224,20 @@ export function BucketClient() {
                     {isOver ? "Lepaskan di sini" : "Tidak ada subtask"}
                   </div>
                 ) : (
-                  items.map((card) => (
+                  items.map((s) => (
                     <SubtaskCard
-                      key={card.subtask.id}
-                      card={card}
-                      owned={card.subtask.assigneeId === myId}
-                      busy={busyId === card.subtask.id}
-                      draggable={canDrag(card)}
-                      dragging={dragId === card.subtask.id}
-                      onDragStart={() => setDragId(card.subtask.id)}
+                      key={s.id}
+                      subtask={s}
+                      owned={s.assigneeId === myId}
+                      busy={busyId === s.id}
+                      draggable={canDrag(s)}
+                      dragging={dragId === s.id}
+                      onDragStart={() => setDragId(s.id)}
                       onDragEnd={() => {
                         setDragId(null);
                         setOverCol(null);
                       }}
-                      onOpenDetail={() => setDetailId(card.subtask.id)}
+                      onOpenDetail={() => setDetailId(s.id)}
                     />
                   ))
                 )}
@@ -267,7 +253,7 @@ export function BucketClient() {
 }
 
 function SubtaskCard({
-  card,
+  subtask: st,
   owned,
   busy,
   draggable,
@@ -276,7 +262,7 @@ function SubtaskCard({
   onDragEnd,
   onOpenDetail,
 }: {
-  card: Card;
+  subtask: AvailableSubtask;
   owned: boolean;
   busy: boolean;
   draggable: boolean;
@@ -285,7 +271,7 @@ function SubtaskCard({
   onDragEnd: () => void;
   onOpenDetail: () => void;
 }) {
-  const { subtask: st, task } = card;
+  const task = st.task;
   return (
     <article
       draggable={draggable && !busy}

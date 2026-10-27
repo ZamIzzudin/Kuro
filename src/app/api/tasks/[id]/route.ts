@@ -9,6 +9,7 @@ import { ADMIN_ROLES } from '@/lib/roles'
 import { createTaskAttachments } from '@/lib/attachments'
 import { findTask, mapTask, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
 import { closeSprintMembership, recordSprintJoin } from '@/lib/sprints'
+import { syncTaskStatusFromSubtasks } from '@/lib/task-status'
 import { removeObject } from '@/lib/storage'
 import { dateOnlyUTC, wibLocalToDate } from '@/lib/time'
 import { taskUpdateSchema } from '@/lib/validators'
@@ -115,10 +116,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.deadlineLocal !== undefined) data.deadlineAt = wibLocalToDate(body.deadlineLocal)
   if (body.status !== undefined) data.status = body.status
 
+  // Membatalkan task dari sisi task berarti seluruh subtask-nya juga dibatalkan
+  // (subtask tidak boleh tetap bisa dikerjakan/dipilih setelah task dibatalkan).
+  const cancelSubtasks = body.status === 'cancelled' && before.status !== 'cancelled'
+
   const sprintChanged = body.sprintId !== undefined && (body.sprintId || null) !== before.sprintId
 
   await db.$transaction(async (tx) => {
     await tx.task.update({ where: { id: params.id }, data })
+
+    // Batal task → ikut batalkan seluruh subtask yang belum selesai.
+    if (cancelSubtasks) {
+      await tx.subtask.updateMany({
+        where: { taskId: params.id, status: { notIn: ['done', 'cancelled'] } },
+        data: { status: 'cancelled' },
+      })
+    }
 
     // Ganti pool assignee (bila field dikirim)
     if (body.assigneeIds) {
@@ -181,6 +194,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     // Task ditandai selesai langsung oleh admin → tutup keanggotaan sprint terbuka
     if (body.status === 'done' && before.status !== 'done' && !sprintChanged) {
       await closeSprintMembership(tx, params.id, 'completed', 'done')
+    }
+
+    // Perubahan daftar subtask menurunkan ulang status task (kecuali admin mengatur
+    // status secara eksplisit / task dibatalkan — keputusan admin diutamakan).
+    if (incoming && body.status === undefined && before.status !== 'cancelled') {
+      await syncTaskStatusFromSubtasks(tx, params.id)
     }
   }, TX_OPTIONS)
 

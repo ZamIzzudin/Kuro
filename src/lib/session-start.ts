@@ -11,6 +11,7 @@ import {
   mapTimeEntry,
   type TimeEntryItem,
 } from './time-entries'
+import { syncTaskStatusFromSubtasks } from './task-status'
 
 export type StartSessionResult =
   | {
@@ -126,6 +127,11 @@ export async function startSession(opts: {
             ...(statusChanged ? { status: statusChanged.to } : {}),
           },
         })
+      }
+
+      // Status task induk mengikuti subtask (mis. task To Do → In Progress saat clock in).
+      if (statusChanged) {
+        await syncTaskStatusFromSubtasks(tx, subtask.taskId, now)
       }
 
       return tx.timeEntry.create({

@@ -7,6 +7,8 @@ import { requireApiUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/lib/roles'
 import { createSubtaskAttachments } from '@/lib/attachments'
 import { SUBTASK_INCLUDE, mapSubtask, freelancerSubtaskScope } from '@/lib/tasks'
+import { syncTaskStatusFromSubtasks } from '@/lib/task-status'
+import { STATUS_LABEL } from '@/lib/time-entries'
 import { removeObject } from '@/lib/storage'
 import { subtaskUpdateSchema } from '@/lib/validators'
 
@@ -89,8 +91,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.assigneeId !== undefined) data.assigneeId = body.assigneeId || null
   if (body.estimatedHours !== undefined) data.estimatedHours = body.estimatedHours ?? null
   if (body.position !== undefined) data.position = body.position
+  if (body.status !== undefined) data.status = body.status
 
-  const updated = await db.$transaction(async (tx) => {
+  const taskBefore = await db.task.findUnique({ where: { id: before.taskId }, select: { status: true } })
+
+  const { updated, taskStatus } = await db.$transaction(async (tx) => {
     await tx.subtask.update({ where: { id: params.id }, data })
     if (attachmentsToRemove.length) {
       await tx.subtaskAttachment.deleteMany({ where: { id: { in: attachmentsToRemove.map((a) => a.id) } } })
@@ -98,7 +103,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     if (body.addAttachments?.length) {
       await createSubtaskAttachments(tx, params.id, admin.id, body.addAttachments)
     }
-    return tx.subtask.findUniqueOrThrow({ where: { id: params.id }, include: SUBTASK_INCLUDE })
+    // Perubahan status subtask menurunkan ulang status task induk.
+    const taskStatus = await syncTaskStatusFromSubtasks(tx, before.taskId)
+    const updated = await tx.subtask.findUniqueOrThrow({ where: { id: params.id }, include: SUBTASK_INCLUDE })
+    return { updated, taskStatus }
   }, TX_OPTIONS)
 
   await Promise.all(attachmentsToRemove.map((a) => removeObject(a.objectKey)))
@@ -108,10 +116,22 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     action: 'subtask_updated',
     entityType: 'subtask',
     entityId: updated.id,
-    oldValue: { title: before.title, assigneeId: before.assigneeId, estimatedHours: before.estimatedHours },
-    newValue: { title: updated.title, assigneeId: updated.assigneeId, estimatedHours: updated.estimatedHours },
+    oldValue: { title: before.title, assigneeId: before.assigneeId, estimatedHours: before.estimatedHours, status: before.status },
+    newValue: { title: updated.title, assigneeId: updated.assigneeId, estimatedHours: updated.estimatedHours, status: updated.status },
     description: `${admin.name} mengubah subtask "${before.title}"`,
   })
+
+  if (taskStatus && taskBefore && taskStatus !== taskBefore.status) {
+    await logActivity({
+      userId: admin.id,
+      action: 'task_status_changed',
+      entityType: 'task',
+      entityId: before.taskId,
+      oldValue: { taskStatus: taskBefore.status },
+      newValue: { taskStatus },
+      description: `Status task induk otomatis mengikuti subtask: ${STATUS_LABEL[taskBefore.status]} → ${STATUS_LABEL[taskStatus]}`,
+    })
+  }
 
   return NextResponse.json({ subtask: mapSubtask(updated) })
 }
@@ -132,7 +152,11 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
     )
   }
 
-  await db.subtask.delete({ where: { id: params.id } })
+  await db.$transaction(async (tx) => {
+    await tx.subtask.delete({ where: { id: params.id } })
+    // Menghapus subtask bisa mengubah status task (mis. subtask terakhir yang tersisa).
+    await syncTaskStatusFromSubtasks(tx, subtask.taskId)
+  }, TX_OPTIONS)
   await logActivity({
     userId: admin.id,
     action: 'subtask_deleted',

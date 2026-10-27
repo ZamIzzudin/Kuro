@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ArrowLeft, Ban, Eye, Layers, Pencil, Plus, RotateCcw, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Ban, Eye, LayoutGrid, Layers, List, Pencil, Plus, RotateCcw, Trash2, UserPlus } from "lucide-react";
 import type { Priority, TaskStatus } from "@prisma/client";
 import {
   Button,
@@ -25,6 +25,7 @@ import {
 } from "@/components/attachment";
 import { TaskDetailSheet } from "@/components/task-detail";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { TaskKanban } from "./task-kanban";
 import {
   OverdueBadge,
   PriorityBadge,
@@ -88,6 +89,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
   );
 
   const [q, setQ] = useState("");
+  const [view, setView] = useState<"table" | "board">("table");
   const [fStatus, setFStatus] = useState("all");
   const [fSprint, setFSprint] = useState("all");
   const [fAssignee, setFAssignee] = useState("all");
@@ -99,6 +101,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
   const [revisionFor, setRevisionFor] = useState<TaskItem | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const tasks = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data]);
   const sprints = useMemo(() => sprintsReq.data?.sprints ?? [], [sprintsReq.data]);
@@ -139,6 +142,20 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
     sprintsReq.error;
   const canCreate =
     !workTypesReq.isLoading && workTypes.length > 0 && requesters.length > 0;
+
+  // Ubah status task lewat drag & drop di papan kanban.
+  async function changeTaskStatus(task: TaskItem, status: TaskStatus) {
+    setBusyId(task.id);
+    setRowError(null);
+    try {
+      await apiSend(`/api/tasks/${task.id}`, "PATCH", { status });
+      await tasksReq.mutate();
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "Gagal mengubah status task");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="mx-auto max-w-[1400px]">
@@ -187,6 +204,23 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex rounded-full bg-surface-2 p-1 ring-1 ring-line">
+            {([
+              { key: "table", label: "Tabel", icon: List },
+              { key: "board", label: "Kanban", icon: LayoutGrid },
+            ] as const).map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                onClick={() => setView(v.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-bold transition ${
+                  view === v.key ? "bg-brand-1 text-white" : "text-ink-500 hover:text-ink-900"
+                }`}
+              >
+                <v.icon className="h-3.5 w-3.5" /> {v.label}
+              </button>
+            ))}
+          </div>
           <Link
             href={`/admin/sprints?projectId=${projectId}`}
             className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface px-3 py-2 text-[12.5px] font-bold text-ink-700 transition hover:bg-surface-2"
@@ -298,6 +332,30 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      {view === "board" ? (
+        tasksReq.isLoading ? (
+          <div className="flex items-center justify-center py-16 text-ink-400">
+            <Spinner />{" "}
+            <span className="ml-3 text-sm font-semibold">Memuat task…</span>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-xl border border-line bg-surface py-16 text-center shadow-sm">
+            <p className="text-sm font-bold text-ink-700">Tidak ada task</p>
+            <p className="mt-1 text-sm text-ink-500">
+              {tasks.length === 0
+                ? "Klik “Buat Task” untuk menambah task pertama di project ini."
+                : "Coba ubah filter pencarian."}
+            </p>
+          </div>
+        ) : (
+          <TaskKanban
+            tasks={rows}
+            busyId={busyId}
+            onOpenDetail={setDetailId}
+            onStatusChange={changeTaskStatus}
+          />
+        )
+      ) : (
       <div className="overflow-x-auto rounded-xl border border-line bg-surface shadow-sm">
         {tasksReq.isLoading ? (
           <div className="flex items-center justify-center py-16 text-ink-400">
@@ -426,6 +484,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
           </table>
         )}
       </div>
+      )}
 
       {formTarget && (
         <TaskFormSheet

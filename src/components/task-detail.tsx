@@ -2,14 +2,16 @@
 
 // Sheet detail TASK — level "cerita": metadata bisnis, brief/lampiran, daftar assignee,
 // dan daftar subtask (unit kerja). Dipakai dari daftar task admin.
+import { useState } from 'react'
 import useSWR from 'swr'
 import { CalendarDays, Clock, FileText, FolderKanban, GitBranch, History, Layers, User, UserCheck } from 'lucide-react'
+import type { TaskStatus } from '@prisma/client'
 import { Sheet } from '@/components/sheet'
-import { ErrorNote, Spinner } from '@/components/ui'
+import { ErrorNote, Select, Spinner } from '@/components/ui'
 import { AttachmentList, formatBytes } from '@/components/attachment'
-import { OverdueBadge, PriorityBadge, RevisionBadge, StatusPill, TaskProgress } from '@/components/task-bits'
+import { OverdueBadge, PriorityBadge, RevisionBadge, STATUS_META, StatusPill, TaskProgress } from '@/components/task-bits'
 import { Markdown } from '@/components/markdown'
-import { fetcher } from '@/lib/client'
+import { apiSend, fetcher } from '@/lib/client'
 import { formatMinutes, formatWIB } from '@/lib/time'
 import type { TaskItem } from '@/lib/tasks'
 
@@ -26,8 +28,25 @@ export function TaskDetailSheet({
   /** Buka detail task lain (mis. task revisi / task asal revisi). */
   onOpenTask?: (taskId: string) => void
 }) {
-  const { data, isLoading, error } = useSWR<{ task: TaskItem }>(`/api/tasks/${taskId}`, fetcher)
+  const { data, isLoading, error, mutate } = useSWR<{ task: TaskItem }>(`/api/tasks/${taskId}`, fetcher)
   const task = data?.task ?? fallback ?? null
+
+  const [busySubtaskId, setBusySubtaskId] = useState<string | null>(null)
+  const [subtaskError, setSubtaskError] = useState<string | null>(null)
+
+  // Admin/PM mengubah status subtask; status task induk otomatis ikut (rollup di API).
+  async function changeSubtaskStatus(subtaskId: string, status: TaskStatus) {
+    setBusySubtaskId(subtaskId)
+    setSubtaskError(null)
+    try {
+      await apiSend(`/api/subtasks/${subtaskId}`, 'PATCH', { status })
+      await mutate()
+    } catch (e) {
+      setSubtaskError(e instanceof Error ? e.message : 'Gagal mengubah status subtask')
+    } finally {
+      setBusySubtaskId(null)
+    }
+  }
 
   return (
     <Sheet open onClose={onClose} size="lg" title={task?.title ?? 'Detail Task'}>
@@ -154,6 +173,11 @@ export function TaskDetailSheet({
                 {task.subtaskProgress.done}/{task.subtaskProgress.total} selesai
               </span>
             </h4>
+            {subtaskError && (
+              <div className="mb-2">
+                <ErrorNote>{subtaskError}</ErrorNote>
+              </div>
+            )}
             <ul className="divide-y divide-line-soft rounded-lg border border-line bg-surface">
               {task.subtasks.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
@@ -163,7 +187,19 @@ export function TaskDetailSheet({
                       {s.assignee?.name ?? 'Belum di-assign'} · {formatMinutes(s.loggedMinutes)} tercatat
                     </p>
                   </div>
-                  <StatusPill status={s.status} />
+                  <Select
+                    value={s.status}
+                    disabled={busySubtaskId === s.id}
+                    aria-label={`Status subtask ${s.title}`}
+                    onChange={(e) => changeSubtaskStatus(s.id, e.target.value as TaskStatus)}
+                    className="w-[140px] shrink-0 py-1.5 text-[12.5px]"
+                  >
+                    {(['todo', 'in_progress', 'review', 'done', 'cancelled'] as TaskStatus[]).map((st) => (
+                      <option key={st} value={st}>
+                        {STATUS_META[st].label}
+                      </option>
+                    ))}
+                  </Select>
                 </li>
               ))}
             </ul>
