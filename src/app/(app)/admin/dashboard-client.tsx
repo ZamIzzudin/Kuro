@@ -35,13 +35,13 @@ import type { TaskStatus } from '@prisma/client'
 const POLL = 30_000
 
 /** Urutan status pada donut "Task per Status" (termasuk dibatalkan) */
-const ALL_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done', 'cancelled']
+const ALL_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'revision', 'done']
 const EMPTY_STATUS_COUNTS: Record<TaskStatus, number> = {
   todo: 0,
   in_progress: 0,
   review: 0,
+  revision: 0,
   done: 0,
-  cancelled: 0,
 }
 
 /** Warna seri per user (hex agar aman untuk recharts) */

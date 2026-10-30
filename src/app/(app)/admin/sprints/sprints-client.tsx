@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   CalendarRange,
   CheckCircle2,
+  ListChecks,
   Pencil,
   Play,
   Plus,
@@ -31,9 +32,12 @@ import {
 import { Sheet } from "@/components/sheet";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { Markdown } from "@/components/markdown";
+import { StatusPill } from "@/components/task-bits";
 import { apiSend, fetcher } from "@/lib/client";
 import { formatDateWIB, todayWibDate } from "@/lib/time";
+import { cn } from "@/lib/utils";
 import type { SprintItem } from "@/lib/sprints";
+import type { TaskItem } from "@/lib/tasks";
 import type { ProjectItem } from "@/lib/projects";
 
 const STATUS_META: Record<SprintStatus, { label: string; chip: string }> = {
@@ -47,6 +51,7 @@ export function SprintsClient() {
   const initialProject = searchParams.get("projectId") ?? "";
   const [projectId, setProjectId] = useState(initialProject);
   const [formTarget, setFormTarget] = useState<SprintItem | "create" | null>(null);
+  const [assignTarget, setAssignTarget] = useState<SprintItem | null>(null);
   const [completeTarget, setCompleteTarget] = useState<SprintItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SprintItem | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -137,6 +142,7 @@ export function SprintsClient() {
               key={s.id}
               sprint={s}
               onEdit={() => setFormTarget(s)}
+              onAssign={() => setAssignTarget(s)}
               onActivate={() => setStatus(s, "active")}
               onComplete={() => setCompleteTarget(s)}
               onReopen={() => setStatus(s, "planned")}
@@ -156,6 +162,13 @@ export function SprintsClient() {
           onDone={() => Promise.all([sprintsReq.mutate(), projectsReq.mutate()])}
         />
       )}
+
+      <AssignTasksSheet
+        sprint={assignTarget}
+        onClose={() => setAssignTarget(null)}
+        onDone={() => Promise.all([sprintsReq.mutate(), projectsReq.mutate()])}
+        onError={setError}
+      />
 
       <CompleteSheet
         sprint={completeTarget}
@@ -178,6 +191,7 @@ export function SprintsClient() {
 function SprintCard({
   sprint,
   onEdit,
+  onAssign,
   onActivate,
   onComplete,
   onReopen,
@@ -185,6 +199,7 @@ function SprintCard({
 }: {
   sprint: SprintItem;
   onEdit: () => void;
+  onAssign: () => void;
   onActivate: () => void;
   onComplete: () => void;
   onReopen: () => void;
@@ -258,6 +273,11 @@ function SprintCard({
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-line-soft pt-4">
+        {sprint.status !== "completed" && (
+          <Button size="sm" variant="secondary" onClick={onAssign}>
+            <ListChecks className="h-3.5 w-3.5" /> Kelola Task
+          </Button>
+        )}
         {sprint.status === "planned" && (
           <Button size="sm" onClick={onActivate}>
             <Play className="h-3.5 w-3.5" /> Aktifkan
@@ -420,8 +440,30 @@ function CompleteSheet({
   onError: (msg: string | null) => void;
 }) {
   const [moveTo, setMoveTo] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Task belum selesai (bisa dipilih pindah) & task yang menetap di sprint (Review/Done).
+  const tasksReq = useSWR<{ tasks: TaskItem[] }>(
+    sprint ? `/api/tasks?projectId=${sprint.projectId}&sprintId=${sprint.id}` : null,
+    fetcher,
+  );
+  const movable = useMemo(
+    () =>
+      (tasksReq.data?.tasks ?? []).filter(
+        (t) => t.status === "todo" || t.status === "in_progress" || t.status === "revision",
+      ),
+    [tasksReq.data],
+  );
+  const staying = useMemo(
+    () => (tasksReq.data?.tasks ?? []).filter((t) => t.status === "review" || t.status === "done"),
+    [tasksReq.data],
+  );
+
+  function toggle(id: string) {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
 
   async function confirm() {
     if (!sprint) return;
@@ -430,6 +472,7 @@ function CompleteSheet({
     try {
       await apiSend(`/api/sprints/${sprint.id}`, "POST", {
         moveToSprintId: moveTo || null,
+        taskIds: moveTo ? selected : [],
       });
       await onDone();
       onClose();
@@ -443,26 +486,73 @@ function CompleteSheet({
   }
 
   return (
-    <Sheet open={!!sprint} onClose={onClose} title="Tutup Sprint">
+    <Sheet open={!!sprint} onClose={onClose} size="lg" title="Tutup Sprint">
       <div className="space-y-4">
         <p className="text-sm text-ink-700">
-          Tutup <span className="font-bold">“{sprint?.name}”</span>? Task yang belum selesai akan
-          dikeluarkan dari sprint ini dan bisa dikerjakan kembali pada sprint berikutnya.
+          Tutup <span className="font-bold">“{sprint?.name}”</span>? Task <span className="font-bold">Review</span> dan{" "}
+          <span className="font-bold">Done</span> tetap di sprint ini (Review hanya bisa diubah menjadi Done).
         </p>
 
         <div>
-          <FieldLabel htmlFor="move-to">Pindahkan task belum selesai ke</FieldLabel>
-          <Select id="move-to" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
-            <option value="">Backlog (di luar sprint)</option>
+          <FieldLabel htmlFor="move-to">Sprint berikutnya (tujuan task yang dipilih)</FieldLabel>
+          <Select
+            id="move-to"
+            value={moveTo}
+            onChange={(e) => {
+              setMoveTo(e.target.value);
+              setSelected([]);
+            }}
+          >
+            <option value="">Backlog (task belum selesai dikembalikan)</option>
             {otherSprints.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name} ({s.status})
               </option>
             ))}
           </Select>
-          <p className="mt-1.5 text-[12px] text-ink-400">
-            Task yang sudah selesai tetap tercatat sebagai hasil sprint ini.
-          </p>
+        </div>
+
+        <div>
+          <FieldLabel>Pilih task yang pindah{moveTo ? " ke sprint tujuan" : ""}</FieldLabel>
+          {tasksReq.isLoading ? (
+            <div className="flex items-center gap-2 py-3 text-ink-400">
+              <Spinner /> <span className="text-[12.5px] font-semibold">Memuat task…</span>
+            </div>
+          ) : movable.length === 0 ? (
+            <p className="rounded-md border border-dashed border-line px-4 py-4 text-center text-[12.5px] font-semibold text-ink-400">
+              Tidak ada task yang perlu dipindah.
+            </p>
+          ) : (
+            <div className="divide-y divide-line-soft rounded-md border border-line">
+              {movable.map((t) => {
+                const on = selected.includes(t.id);
+                return (
+                  <label
+                    key={t.id}
+                    className={cn(
+                      "flex items-center gap-3 px-3 py-2.5 text-[13px]",
+                      !moveTo && "opacity-60",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 shrink-0 accent-[#8B2FF2]"
+                      disabled={!moveTo}
+                      checked={on}
+                      onChange={() => toggle(t.id)}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-semibold text-ink-900">{t.title}</span>
+                    <StatusPill status={t.status} />
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          {staying.length > 0 && (
+            <p className="mt-1.5 text-[12px] text-ink-400">
+              {staying.length} task Review/Done tetap di sprint ini.
+            </p>
+          )}
         </div>
 
         {error && <ErrorNote>{error}</ErrorNote>}
@@ -472,6 +562,150 @@ function CompleteSheet({
           </Button>
           <Button onClick={confirm} loading={saving}>
             <CheckCircle2 className="h-4 w-4" /> Tutup Sprint
+          </Button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+/** Kelola keanggotaan task pada sprint: tambah dari Backlog / keluarkan. */
+function AssignTasksSheet({
+  sprint,
+  onClose,
+  onDone,
+  onError,
+}: {
+  sprint: SprintItem | null;
+  onClose: () => void;
+  onDone: () => Promise<unknown>;
+  onError: (msg: string | null) => void;
+}) {
+  const tasksReq = useSWR<{ tasks: TaskItem[] }>(
+    sprint ? `/api/tasks?projectId=${sprint.projectId}` : null,
+    fetcher,
+  );
+  const all = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data]);
+  const inSprint = useMemo(() => all.filter((t) => t.sprintId === sprint?.id), [all, sprint?.id]);
+  const inOtherSprint = useMemo(
+    () => all.filter((t) => t.sprintId !== null && t.sprintId !== sprint?.id),
+    [all, sprint?.id],
+  );
+  const backlog = useMemo(() => all.filter((t) => t.sprintId === null), [all]);
+
+  const [addIds, setAddIds] = useState<string[]>([]);
+  const [removeIds, setRemoveIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const toggleAdd = (id: string) =>
+    setAddIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const toggleRemove = (id: string) =>
+    setRemoveIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  async function save() {
+    if (!sprint) return;
+    if (addIds.length === 0 && removeIds.length === 0) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await apiSend(`/api/sprints/${sprint.id}/tasks`, "POST", {
+        addTaskIds: addIds,
+        removeTaskIds: removeIds,
+      });
+      await onDone();
+      onClose();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Gagal menyimpan task sprint";
+      setError(msg);
+      onError(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Sheet open={!!sprint} onClose={onClose} size="lg" title="Kelola Task Sprint">
+      <div className="space-y-4">
+        <p className="text-sm text-ink-700">
+          Atur task untuk <span className="font-bold">“{sprint?.name}”</span>. Task baru selalu dibuat di{" "}
+          <span className="font-bold">Backlog</span>; di sini task Backlog dipilih untuk masuk sprint.
+        </p>
+
+        {tasksReq.isLoading ? (
+          <div className="flex items-center gap-2 py-6 text-ink-400">
+            <Spinner /> <span className="text-[12.5px] font-semibold">Memuat task…</span>
+          </div>
+        ) : (
+          <>
+            <div>
+              <FieldLabel>Task di sprint ini ({inSprint.length})</FieldLabel>
+              {inSprint.length === 0 ? (
+                <p className="rounded-md border border-dashed border-line px-4 py-3 text-center text-[12.5px] font-semibold text-ink-400">
+                  Belum ada task di sprint ini.
+                </p>
+              ) : (
+                <div className="divide-y divide-line-soft rounded-md border border-line">
+                  {inSprint.map((t) => (
+                    <label key={t.id} className="flex items-center gap-3 px-3 py-2.5 text-[13px]">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-[#EF4444]"
+                        checked={removeIds.includes(t.id)}
+                        onChange={() => toggleRemove(t.id)}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-semibold text-ink-900">{t.title}</span>
+                      <StatusPill status={t.status} />
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="mt-1.5 text-[12px] text-ink-400">Centang untuk mengeluarkan task dari sprint.</p>
+            </div>
+
+            <div>
+              <FieldLabel>Task Backlog ({backlog.length})</FieldLabel>
+              {backlog.length === 0 ? (
+                <p className="rounded-md border border-dashed border-line px-4 py-3 text-center text-[12.5px] font-semibold text-ink-400">
+                  Tidak ada task di Backlog.
+                </p>
+              ) : (
+                <div className="max-h-60 divide-y divide-line-soft overflow-y-auto rounded-md border border-line">
+                  {backlog.map((t) => (
+                    <label key={t.id} className="flex items-center gap-3 px-3 py-2.5 text-[13px]">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-[#8B2FF2]"
+                        checked={addIds.includes(t.id)}
+                        onChange={() => toggleAdd(t.id)}
+                      />
+                      <span className="min-w-0 flex-1 truncate font-semibold text-ink-900">{t.title}</span>
+                      <StatusPill status={t.status} />
+                    </label>
+                  ))}
+                </div>
+              )}
+              <p className="mt-1.5 text-[12px] text-ink-400">Centang untuk menambahkan ke sprint ini.</p>
+            </div>
+
+            {inOtherSprint.length > 0 && (
+              <p className="text-[12px] text-ink-400">
+                {inOtherSprint.length} task berada di sprint lain (tidak ditampilkan).
+              </p>
+            )}
+          </>
+        )}
+
+        {error && <ErrorNote>{error}</ErrorNote>}
+        <div className="flex justify-end gap-2 border-t border-line-soft pt-4">
+          <Button variant="secondary" onClick={onClose}>
+            Batal
+          </Button>
+          <Button onClick={save} loading={saving}>
+            Simpan
           </Button>
         </div>
       </div>

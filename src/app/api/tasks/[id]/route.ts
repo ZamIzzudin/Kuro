@@ -8,7 +8,7 @@ import { requireApiUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/lib/roles'
 import { createTaskAttachments } from '@/lib/attachments'
 import { findTask, mapTask, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
-import { closeSprintMembership, recordSprintJoin } from '@/lib/sprints'
+import { closeSprintMembership } from '@/lib/sprints'
 import { syncTaskStatusFromSubtasks } from '@/lib/task-status'
 import { removeObject } from '@/lib/storage'
 import { dateOnlyUTC, wibLocalToDate } from '@/lib/time'
@@ -41,7 +41,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (!before) return NextResponse.json({ error: 'Task tidak ditemukan.' }, { status: 404 })
 
   // Validasi referensi yang berubah
-  const nextProjectId = body.projectId ?? before.projectId
   if (body.projectId) {
     const p = await db.project.findUnique({ where: { id: body.projectId } })
     if (!p?.isActive) return NextResponse.json({ error: 'Project tidak ditemukan/nonaktif.' }, { status: 400 })
@@ -55,12 +54,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const r = await db.requester.findUnique({ where: { id: body.requesterId } })
     if (!r || !r.isActive)
       return NextResponse.json({ error: 'Requester tidak ditemukan/nonaktif.' }, { status: 400 })
-  }
-  if (body.sprintId) {
-    const s = await db.sprint.findUnique({ where: { id: body.sprintId } })
-    if (!s || s.projectId !== nextProjectId) {
-      return NextResponse.json({ error: 'Sprint tidak ditemukan pada project ini.' }, { status: 400 })
-    }
   }
   if (body.assigneeIds) {
     const ids = Array.from(new Set(body.assigneeIds))
@@ -107,7 +100,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.title !== undefined) data.title = body.title
   if (body.description !== undefined) data.description = body.description || null
   if (body.projectId !== undefined) data.projectId = body.projectId
-  if (body.sprintId !== undefined) data.sprintId = body.sprintId || null
   if (body.workTypeId !== undefined) data.workTypeId = body.workTypeId
   if (body.requesterId !== undefined) data.requesterId = body.requesterId
   if (body.priority !== undefined) data.priority = body.priority
@@ -116,22 +108,21 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.deadlineLocal !== undefined) data.deadlineAt = wibLocalToDate(body.deadlineLocal)
   if (body.status !== undefined) data.status = body.status
 
-  // Membatalkan task dari sisi task berarti seluruh subtask-nya juga dibatalkan
-  // (subtask tidak boleh tetap bisa dikerjakan/dipilih setelah task dibatalkan).
-  const cancelSubtasks = body.status === 'cancelled' && before.status !== 'cancelled'
-
-  const sprintChanged = body.sprintId !== undefined && (body.sprintId || null) !== before.sprintId
+  // Task `review` di sprint yang sudah selesai hanya boleh maju ke `done`.
+  if (
+    before.status === 'review' &&
+    before.sprint?.status === 'completed' &&
+    body.status !== undefined &&
+    body.status !== 'done'
+  ) {
+    return NextResponse.json(
+      { error: 'Task Review pada sprint yang sudah selesai hanya dapat diubah menjadi Done.' },
+      { status: 400 }
+    )
+  }
 
   await db.$transaction(async (tx) => {
     await tx.task.update({ where: { id: params.id }, data })
-
-    // Batal task → ikut batalkan seluruh subtask yang belum selesai.
-    if (cancelSubtasks) {
-      await tx.subtask.updateMany({
-        where: { taskId: params.id, status: { notIn: ['done', 'cancelled'] } },
-        data: { status: 'cancelled' },
-      })
-    }
 
     // Ganti pool assignee (bila field dikirim)
     if (body.assigneeIds) {
@@ -185,20 +176,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       await createTaskAttachments(tx, params.id, admin.id, addAttachments)
     }
 
-    // Riwayat sprint: tutup keanggotaan lama & catat yang baru
-    if (sprintChanged) {
-      await closeSprintMembership(tx, params.id, body.sprintId ? 'moved' : 'removed')
-      await recordSprintJoin(tx, params.id, body.sprintId)
-    }
-
     // Task ditandai selesai langsung oleh admin → tutup keanggotaan sprint terbuka
-    if (body.status === 'done' && before.status !== 'done' && !sprintChanged) {
+    if (body.status === 'done' && before.status !== 'done') {
       await closeSprintMembership(tx, params.id, 'completed', 'done')
     }
 
     // Perubahan daftar subtask menurunkan ulang status task (kecuali admin mengatur
-    // status secara eksplisit / task dibatalkan — keputusan admin diutamakan).
-    if (incoming && body.status === undefined && before.status !== 'cancelled') {
+    // status secara eksplisit — keputusan admin diutamakan).
+    if (incoming && body.status === undefined) {
       await syncTaskStatusFromSubtasks(tx, params.id)
     }
   }, TX_OPTIONS)
@@ -216,7 +201,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     oldValue: {
       title: before.title,
       projectId: before.projectId,
-      sprintId: before.sprintId,
       workTypeId: before.workTypeId,
       requesterId: before.requesterId,
       assigneeIds: before.assignees.map((a) => a.user.id),
@@ -228,7 +212,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     newValue: {
       title: updated.title,
       projectId: updated.projectId,
-      sprintId: updated.sprintId,
       workTypeId: updated.workTypeId,
       requesterId: updated.requesterId,
       assigneeIds: updated.assignees.map((a) => a.user.id),

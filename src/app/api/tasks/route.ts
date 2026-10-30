@@ -9,7 +9,6 @@ import { requireApiUser } from '@/lib/auth'
 import { ADMIN_ROLES } from '@/lib/roles'
 import { createTaskAttachments } from '@/lib/attachments'
 import { mapTask, sortTasks, TASK_INCLUDE, freelancerTaskScope } from '@/lib/tasks'
-import { recordSprintJoin } from '@/lib/sprints'
 import { dateOnlyUTC, wibLocalToDate } from '@/lib/time'
 import { taskCreateSchema } from '@/lib/validators'
 
@@ -41,7 +40,7 @@ export async function GET(req: Request) {
   if (status && status !== 'all') {
     where.status = status as Prisma.EnumTaskStatusFilter['equals']
   } else if (overdue) {
-    where.status = { notIn: ['done', 'cancelled'] }
+    where.status = { not: 'done' }
   }
   if (projectId && projectId !== 'all') where.projectId = projectId
   if (workTypeId && workTypeId !== 'all') where.workTypeId = workTypeId
@@ -69,7 +68,6 @@ export async function POST(req: Request) {
     title,
     description,
     projectId,
-    sprintId,
     workTypeId,
     requesterId,
     assigneeIds,
@@ -92,14 +90,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Jenis pekerjaan tidak ditemukan/nonaktif.' }, { status: 400 })
   if (!requester?.isActive)
     return NextResponse.json({ error: 'Requester tidak ditemukan/nonaktif.' }, { status: 400 })
-
-  // Sprint (opsional) harus milik project yang sama
-  if (sprintId) {
-    const sprint = await db.sprint.findUnique({ where: { id: sprintId } })
-    if (!sprint || sprint.projectId !== projectId) {
-      return NextResponse.json({ error: 'Sprint tidak ditemukan pada project ini.' }, { status: 400 })
-    }
-  }
 
   const uniqueAssignees = Array.from(new Set(assigneeIds ?? []))
   if (uniqueAssignees.length) {
@@ -141,7 +131,6 @@ export async function POST(req: Request) {
         title,
         description: description || null,
         projectId,
-        sprintId: sprintId || null,
         workTypeId,
         requesterId,
         priority,
@@ -167,7 +156,6 @@ export async function POST(req: Request) {
     if (attachments?.length) {
       await createTaskAttachments(tx, task.id, admin.id, attachments)
     }
-    await recordSprintJoin(tx, task.id, task.sprintId)
     return tx.task.findUniqueOrThrow({ where: { id: task.id }, include: TASK_INCLUDE })
   }, TX_OPTIONS)
 
@@ -179,7 +167,6 @@ export async function POST(req: Request) {
     newValue: {
       title,
       projectId,
-      sprintId: sprintId || null,
       workTypeId,
       requesterId,
       assigneeIds: uniqueAssignees,

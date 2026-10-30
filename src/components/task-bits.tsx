@@ -6,8 +6,8 @@ export const STATUS_META: Record<TaskStatus, { label: string; chip: string; dot:
   todo: { label: 'To Do', chip: 'bg-line-soft text-ink-500', dot: 'bg-status-backlog' },
   in_progress: { label: 'In Progress', chip: 'bg-[#E8EFFF] text-status-progress', dot: 'bg-status-progress' },
   review: { label: 'Review', chip: 'bg-pri-mediumbg text-status-review', dot: 'bg-status-review' },
+  revision: { label: 'Revisi', chip: 'bg-brand-soft text-brand-1', dot: 'bg-brand-1' },
   done: { label: 'Done', chip: 'bg-pri-lowbg text-status-completed', dot: 'bg-status-completed' },
-  cancelled: { label: 'Dibatalkan', chip: 'bg-pri-highbg text-pri-high', dot: 'bg-pri-high' },
 }
 
 export function StatusPill({ status }: { status: TaskStatus }) {
@@ -44,25 +44,6 @@ export function OverdueBadge() {
   return (
     <span className="inline-flex items-center rounded-full bg-pri-highbg px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-pri-high">
       Overdue
-    </span>
-  )
-}
-
-/** Badge penanda task lahir sebagai REVISI dari task lain. */
-export function RevisionBadge() {
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
-      Revisi
-    </span>
-  )
-}
-
-/** Badge ringkas berapa task revisi yang lahir dari task ini. */
-export function RevisionCountBadge({ count }: { count: number }) {
-  if (count <= 0) return null
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
-      {count} revisi
     </span>
   )
 }

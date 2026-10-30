@@ -1,5 +1,5 @@
 // POST /api/time-entries/clock-in — mulai sesi kerja pada sebuah subtask
-// Rule #1 (wajib pilih subtask), #2 (1 sesi aktif), #3 (done/cancelled tak bisa dipilih),
+// Rule #1 (wajib pilih subtask), #2 (1 sesi aktif), #3 (done tak bisa dipilih),
 // #7 (auto-assign + In Progress), #11 (periode terkunci), #12 (scope freelancer).
 import { NextResponse } from 'next/server'
 import { logActivity } from '@/lib/activity'

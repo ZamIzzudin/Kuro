@@ -72,14 +72,12 @@ export async function startSession(opts: {
     return { ok: false, error: NextResponse.json({ error: 'Subtask tidak ditemukan.' }, { status: 404 }) }
   }
 
-  // Rule #3: Done/Dibatalkan tidak bisa dipilih
-  if (subtask.status === 'done' || subtask.status === 'cancelled') {
+  // Rule #3: Done tidak bisa dipilih
+  if (subtask.status === 'done') {
     return {
       ok: false,
       error: NextResponse.json(
-        {
-          error: `Subtask sudah ${subtask.status === 'done' ? 'selesai' : 'dibatalkan'} — tidak bisa dipilih.`,
-        },
+        { error: 'Subtask sudah selesai — tidak bisa dipilih.' },
         { status: 400 }
       ),
     }
@@ -104,9 +102,10 @@ export async function startSession(opts: {
     }
   }
 
-  // Rule #7: subtask unassigned → auto-assign; To Do → In Progress
+  // Rule #7: subtask unassigned → auto-assign; To Do / Revisi → In Progress
   const autoAssigned = subtask.assigneeId === null
-  const nextStatus: TaskStatus | null = subtask.status === 'todo' ? 'in_progress' : null
+  const canStart = subtask.status === 'todo' || subtask.status === 'revision'
+  const nextStatus: TaskStatus | null = canStart ? 'in_progress' : null
   const statusChanged = nextStatus !== null ? { from: subtask.status, to: nextStatus } : null
 
   try {

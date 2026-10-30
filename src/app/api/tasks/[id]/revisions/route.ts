@@ -1,110 +1,66 @@
-// POST /api/tasks/:id/revisions — buat task REVISI dari task yang sudah done/review.
+// POST /api/tasks/:id/revisions — Minta Revisi pada task (atau subtask terpilih).
 //
-// Aturan konsep "Revisi":
-// - Aksi ini TIDAK mengubah status task lama menjadi sebuah status "revisi".
-// - Sebagai gantinya dibuat Task BARU dengan flag `isRevision`, menyalin detail
-//   task lama apa adanya (judul, deskripsi, assignee, subtask) — admin yang
-//   kemudian mengubah detail yang perlu direvisi.
-// - Task baru berstatus `todo` agar bisa diambil pada sprint berikutnya.
-// - Task lama tetap `done` (bila tadinya `review` → dinaikkan menjadi `done`),
-//   sehingga jejak task yang minta revisi tetap terjaga.
+// Konsep baru "Revisi":
+// - TIDAK lagi membuat task baru. Task yang sama dikembalikan ke status `revision`.
+// - Admin/PM/freelancer memilih SUBTASK mana yang dikembalikan menjadi `revision`;
+//   subtask itulah yang nanti diambil ulang freelancer (bucket ikut menampilkan `revision`).
+// - Task TETAP berada di sprint yang sama (tidak dipindah).
+// - `revisionNote` menyimpan alasan revisi pada task.
 import { NextResponse } from 'next/server'
 import { db, TX_OPTIONS } from '@/lib/db'
 import { logActivity } from '@/lib/activity'
 import { parseJson } from '@/lib/api-helpers'
 import { requireApiUser } from '@/lib/auth'
-import { ADMIN_ROLES } from '@/lib/roles'
 import { findTask, mapTask, TASK_INCLUDE } from '@/lib/tasks'
-import { closeSprintMembership, recordSprintJoin } from '@/lib/sprints'
+import { markTaskRevision } from '@/lib/task-revision'
 import { taskRevisionSchema } from '@/lib/validators'
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const { user: admin, error } = await requireApiUser(ADMIN_ROLES)
+  const { user, error } = await requireApiUser()
   if (error) return error
 
   const parsed = await parseJson(req, taskRevisionSchema)
   if (parsed.error) return parsed.error
-  const { note, sprintId } = parsed.data
+  const { note, subtaskIds } = parsed.data
 
-  const source = await findTask(params.id)
-  if (!source) return NextResponse.json({ error: 'Task tidak ditemukan.' }, { status: 404 })
+  const task = await findTask(params.id)
+  if (!task) return NextResponse.json({ error: 'Task tidak ditemukan.' }, { status: 404 })
 
-  // Hanya task yang sudah done/review yang bisa direvisi.
-  if (source.status !== 'done' && source.status !== 'review') {
-    return NextResponse.json(
-      { error: 'Revisi hanya bisa dibuat untuk task berstatus Done atau Review.' },
-      { status: 400 }
-    )
-  }
-
-  // Sprint tujuan (opsional) harus berada di project yang sama.
-  if (sprintId) {
-    const sprint = await db.sprint.findUnique({ where: { id: sprintId } })
-    if (!sprint || sprint.projectId !== source.projectId) {
-      return NextResponse.json({ error: 'Sprint tidak ditemukan pada project ini.' }, { status: 400 })
-    }
-  }
-
-  const created = await db.$transaction(async (tx) => {
-    const task = await tx.task.create({
-      data: {
-        title: source.title,
-        description: source.description,
-        projectId: source.projectId,
-        sprintId: sprintId || null,
-        workTypeId: source.workTypeId,
-        requesterId: source.requesterId,
-        requestDate: source.requestDate,
-        priority: source.priority,
-        deadlineAt: source.deadlineAt,
-        estimatedHours: source.estimatedHours,
-        status: 'todo',
-        isRevision: true,
-        revisionOfId: source.id,
-        revisionNote: note || null,
-        createdById: admin.id,
-        ...(source.assignees.length
-          ? { assignees: { create: source.assignees.map((a) => ({ userId: a.userId })) } }
-          : {}),
-        subtasks: {
-          create: source.subtasks.map((s) => ({
-            title: s.title,
-            description: s.description,
-            assigneeId: s.assigneeId,
-            estimatedHours: s.estimatedHours,
-            position: s.position,
-            status: 'todo',
-          })),
-        },
-      },
-      include: TASK_INCLUDE,
+  if (user.role === 'freelancer') {
+    const member = await db.projectMember.findUnique({
+      where: { projectId_userId: { projectId: task.projectId, userId: user.id } },
+      select: { id: true },
     })
-
-    // Task asal yang tadinya review → naikkan ke done & tutup keanggotaan sprint.
-    if (source.status === 'review') {
-      await tx.task.update({ where: { id: source.id }, data: { status: 'done' } })
-      await closeSprintMembership(tx, source.id, 'completed', 'done')
+    const assigned = task.assignees.some((a) => a.user.id === user.id)
+    if (!member && !assigned) {
+      return NextResponse.json({ error: 'Akses ditolak' }, { status: 403 })
     }
+  }
 
-    await recordSprintJoin(tx, task.id, task.sprintId)
-    return tx.task.findUniqueOrThrow({ where: { id: task.id }, include: TASK_INCLUDE })
-  }, TX_OPTIONS)
+  const validSubtaskIds = task.subtasks.filter((s) => subtaskIds.includes(s.id)).map((s) => s.id)
+  if (validSubtaskIds.length !== new Set(subtaskIds).size) {
+    return NextResponse.json({ error: 'Ada subtask yang tidak ditemukan pada task ini.' }, { status: 400 })
+  }
+
+  const updated = await db.$transaction(
+    async (tx) => markTaskRevision(tx, task.id, validSubtaskIds, note || null),
+    TX_OPTIONS
+  )
 
   await logActivity({
-    userId: admin.id,
-    action: 'task_revision_created',
+    userId: user.id,
+    action: 'task_revision_requested',
     entityType: 'task',
-    entityId: created.id,
+    entityId: task.id,
     newValue: {
-      revisionOfId: source.id,
-      revisionOfTitle: source.title,
-      title: created.title,
-      sprintId: created.sprintId,
+      title: task.title,
+      sprintId: task.sprintId,
+      subtaskIds: validSubtaskIds,
       note: note || null,
-      subtaskCount: created.subtasks.length,
     },
-    description: `${admin.name} membuat revisi dari task "${source.title}"`,
+    description: `${user.name} meminta revisi task "${task.title}" (${validSubtaskIds.length} subtask)`,
   })
 
-  return NextResponse.json({ task: mapTask(created) }, { status: 201 })
+  const withRelations = await db.task.findUniqueOrThrow({ where: { id: updated.id }, include: TASK_INCLUDE })
+  return NextResponse.json({ task: mapTask(withRelations) }, { status: 201 })
 }

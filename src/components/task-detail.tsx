@@ -4,12 +4,12 @@
 // dan daftar subtask (unit kerja). Dipakai dari daftar task admin.
 import { useState } from 'react'
 import useSWR from 'swr'
-import { CalendarDays, Clock, FileText, FolderKanban, GitBranch, History, Layers, User, UserCheck } from 'lucide-react'
+import { CalendarDays, Clock, FileText, FolderKanban, History, Layers, RotateCcw, User, UserCheck } from 'lucide-react'
 import type { TaskStatus } from '@prisma/client'
 import { Sheet } from '@/components/sheet'
-import { ErrorNote, Select, Spinner } from '@/components/ui'
+import { Button, ErrorNote, Select, Spinner } from '@/components/ui'
 import { AttachmentList, formatBytes } from '@/components/attachment'
-import { OverdueBadge, PriorityBadge, RevisionBadge, STATUS_META, StatusPill, TaskProgress } from '@/components/task-bits'
+import { OverdueBadge, PriorityBadge, STATUS_META, StatusPill, TaskProgress } from '@/components/task-bits'
 import { Markdown } from '@/components/markdown'
 import { apiSend, fetcher } from '@/lib/client'
 import { formatMinutes, formatWIB } from '@/lib/time'
@@ -19,20 +19,21 @@ export function TaskDetailSheet({
   taskId,
   fallback,
   onClose,
-  onOpenTask,
 }: {
   taskId: string
   /** Data yang sudah dimiliki pemanggil (opsional) — dipakai sebagai tampilan awal. */
   fallback?: TaskItem | null
   onClose: () => void
-  /** Buka detail task lain (mis. task revisi / task asal revisi). */
-  onOpenTask?: (taskId: string) => void
 }) {
   const { data, isLoading, error, mutate } = useSWR<{ task: TaskItem }>(`/api/tasks/${taskId}`, fetcher)
   const task = data?.task ?? fallback ?? null
 
   const [busySubtaskId, setBusySubtaskId] = useState<string | null>(null)
   const [subtaskError, setSubtaskError] = useState<string | null>(null)
+  const [revisionMode, setRevisionMode] = useState(false)
+  const [selected, setSelected] = useState<string[]>([])
+  const [revisionNote, setRevisionNote] = useState('')
+  const [savingRevision, setSavingRevision] = useState(false)
 
   // Admin/PM mengubah status subtask; status task induk otomatis ikut (rollup di API).
   async function changeSubtaskStatus(subtaskId: string, status: TaskStatus) {
@@ -45,6 +46,30 @@ export function TaskDetailSheet({
       setSubtaskError(e instanceof Error ? e.message : 'Gagal mengubah status subtask')
     } finally {
       setBusySubtaskId(null)
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  async function submitRevision() {
+    if (!task || selected.length === 0) return
+    setSavingRevision(true)
+    setSubtaskError(null)
+    try {
+      await apiSend(`/api/tasks/${task.id}/revisions`, 'POST', {
+        subtaskIds: selected,
+        note: revisionNote.trim() || null,
+      })
+      setRevisionMode(false)
+      setSelected([])
+      setRevisionNote('')
+      await mutate()
+    } catch (e) {
+      setSubtaskError(e instanceof Error ? e.message : 'Gagal meminta revisi')
+    } finally {
+      setSavingRevision(false)
     }
   }
 
@@ -63,7 +88,6 @@ export function TaskDetailSheet({
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={task.status} />
             <PriorityBadge priority={task.priority} />
-            {task.isRevision && <RevisionBadge />}
             {task.overdue && <OverdueBadge />}
             {task.sprint ? (
               <span className="rounded-full bg-brand-soft px-2.5 py-1 text-[10.5px] font-extrabold uppercase tracking-wide text-brand-1">
@@ -111,49 +135,12 @@ export function TaskDetailSheet({
             </p>
           </div>
 
-          {(task.revisionOf || task.revisions.length > 0 || task.revisionNote) && (
+          {task.revisionNote && (
             <div className="rounded-lg border border-brand-1/20 bg-brand-soft/40 p-4">
               <h4 className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold uppercase tracking-wide text-brand-1">
-                <History className="h-3.5 w-3.5" /> Revisi
+                <History className="h-3.5 w-3.5" /> Catatan Revisi
               </h4>
-              {task.revisionOf && (
-                <InfoRow icon={<GitBranch className="h-3.5 w-3.5" />} label="Direvisi dari">
-                  <button
-                    type="button"
-                    onClick={() => onOpenTask?.(task.revisionOf!.id)}
-                    className="text-left font-bold text-brand-1 hover:underline"
-                  >
-                    {task.revisionOf.title}
-                  </button>
-                </InfoRow>
-              )}
-              {task.revisionNote && (
-                <div className="mt-2">
-                  <dt className="text-[11.5px] font-bold uppercase tracking-wide text-ink-400">Catatan revisi</dt>
-                  <dd className="mt-0.5 whitespace-pre-wrap text-[13px] text-ink-700">{task.revisionNote}</dd>
-                </div>
-              )}
-              {task.revisions.length > 0 && (
-                <div className="mt-3">
-                  <dt className="mb-1 text-[11.5px] font-bold uppercase tracking-wide text-ink-400">
-                    Menghasilkan {task.revisions.length} task revisi
-                  </dt>
-                  <ul className="divide-y divide-line-soft rounded-md border border-line bg-surface">
-                    {task.revisions.map((r) => (
-                      <li key={r.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                        <button
-                          type="button"
-                          onClick={() => onOpenTask?.(r.id)}
-                          className="min-w-0 truncate text-left text-[13px] font-bold text-ink-900 hover:text-brand-1"
-                        >
-                          {r.title}
-                        </button>
-                        <StatusPill status={r.status} />
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <p className="whitespace-pre-wrap text-[13px] text-ink-700">{task.revisionNote}</p>
             </div>
           )}
 
@@ -167,12 +154,68 @@ export function TaskDetailSheet({
           )}
 
           <div>
-            <h4 className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">
-              <Layers className="h-3.5 w-3.5" /> Subtask
-              <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold normal-case tracking-normal text-ink-500 ring-1 ring-line">
-                {task.subtaskProgress.done}/{task.subtaskProgress.total} selesai
-              </span>
-            </h4>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <h4 className="flex items-center gap-1.5 text-[12.5px] font-bold uppercase tracking-wide text-ink-500">
+                <Layers className="h-3.5 w-3.5" /> Subtask
+                <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-bold normal-case tracking-normal text-ink-500 ring-1 ring-line">
+                  {task.subtaskProgress.done}/{task.subtaskProgress.total} selesai
+                </span>
+              </h4>
+              {!revisionMode ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setRevisionMode(true)
+                    setSelected([])
+                  }}
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Minta Revisi
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setRevisionMode(false)
+                      setSelected([])
+                    }}
+                  >
+                    Batal
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    loading={savingRevision}
+                    disabled={selected.length === 0}
+                    onClick={submitRevision}
+                  >
+                    Kembalikan {selected.length} subtask
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {revisionMode && (
+              <div className="mb-3 rounded-lg border border-brand-1/25 bg-brand-soft/40 p-3">
+                <p className="text-[12.5px] font-semibold text-ink-700">
+                  Pilih subtask yang perlu dikerjakan ulang. Subtask itu dikembalikan ke status{' '}
+                  <span className="font-bold text-brand-1">Revisi</span> dan bisa diambil freelancer lagi.
+                </p>
+                <textarea
+                  className="mt-2 w-full rounded-md border border-line bg-surface px-3 py-2 text-[13px] text-ink-900 outline-none focus:border-brand-1"
+                  rows={2}
+                  maxLength={1000}
+                  placeholder="Catatan revisi (opsional) — mis. warna tombol kurang kontras"
+                  value={revisionNote}
+                  onChange={(e) => setRevisionNote(e.target.value)}
+                />
+              </div>
+            )}
+
             {subtaskError && (
               <div className="mb-2">
                 <ErrorNote>{subtaskError}</ErrorNote>
@@ -181,7 +224,16 @@ export function TaskDetailSheet({
             <ul className="divide-y divide-line-soft rounded-lg border border-line bg-surface">
               {task.subtasks.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
+                  {revisionMode && (
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 shrink-0 accent-[#8B2FF2]"
+                      checked={selected.includes(s.id)}
+                      onChange={() => toggleSelected(s.id)}
+                      aria-label={`Pilih subtask ${s.title}`}
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
                     <p className="truncate text-[13.5px] font-bold text-ink-900">{s.title}</p>
                     <p className="mt-0.5 truncate text-[12px] text-ink-500">
                       {s.assignee?.name ?? 'Belum di-assign'} · {formatMinutes(s.loggedMinutes)} tercatat
@@ -189,12 +241,12 @@ export function TaskDetailSheet({
                   </div>
                   <Select
                     value={s.status}
-                    disabled={busySubtaskId === s.id}
+                    disabled={busySubtaskId === s.id || revisionMode}
                     aria-label={`Status subtask ${s.title}`}
                     onChange={(e) => changeSubtaskStatus(s.id, e.target.value as TaskStatus)}
                     className="w-[140px] shrink-0 py-1.5 text-[12.5px]"
                   >
-                    {(['todo', 'in_progress', 'review', 'done', 'cancelled'] as TaskStatus[]).map((st) => (
+                    {(['todo', 'in_progress', 'review', 'revision', 'done'] as TaskStatus[]).map((st) => (
                       <option key={st} value={st}>
                         {STATUS_META[st].label}
                       </option>

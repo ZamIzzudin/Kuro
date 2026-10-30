@@ -36,8 +36,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: PERIOD_LOCK_MESSAGE }, { status: 423 })
   }
 
-  // Subtask yang sudah Done/Dibatalkan terkunci — hanya admin yang boleh mengubah.
-  const locked = active.subtask.status === 'done' || active.subtask.status === 'cancelled'
+  // Subtask yang sudah Done terkunci — hanya admin yang boleh mengubah.
+  const locked = active.subtask.status === 'done'
   const effectiveStatus = locked ? active.subtask.status : subtaskStatus
 
   const entry = await db.$transaction(async (tx) => {
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       await tx.subtask.update({ where: { id: active.subtaskId }, data: { status: subtaskStatus } })
     }
 
-    // Rollup status task dari subtask (task `cancelled` bersifat terminal).
+    // Rollup status task dari subtask.
     await syncTaskStatusFromSubtasks(tx, active.subtask.taskId, now)
 
     return updated

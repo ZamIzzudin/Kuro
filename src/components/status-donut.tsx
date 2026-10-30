@@ -12,11 +12,11 @@ const STATUS_HEX: Record<TaskStatus, string> = {
   todo: '#9291A0',
   in_progress: '#2F6FED',
   review: '#F0932B',
+  revision: '#8B2FF2',
   done: '#1FB673',
-  cancelled: '#EF4444',
 }
 
-const ACTIVE_ORDER: TaskStatus[] = ['todo', 'in_progress', 'review', 'done']
+const ACTIVE_ORDER: TaskStatus[] = ['todo', 'in_progress', 'review', 'revision', 'done']
 
 export function TaskStatusDonut({
   counts,

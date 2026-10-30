@@ -23,12 +23,6 @@ export const TASK_INCLUDE = {
   assignees: { include: { user: { select: { id: true, name: true } } } },
   attachments: { orderBy: { createdAt: 'asc' } },
   subtasks: { include: SUBTASK_INCLUDE, orderBy: { position: 'asc' } },
-  // Relasi revisi: task asal (bila ini revisi) & daftar revisi turunannya.
-  revisionOf: { select: { id: true, title: true, status: true } },
-  revisions: {
-    select: { id: true, title: true, status: true, sprintId: true, createdAt: true },
-    orderBy: { createdAt: 'asc' },
-  },
 } satisfies Prisma.TaskInclude
 
 type SubtaskWithRelations = Prisma.SubtaskGetPayload<{ include: typeof SUBTASK_INCLUDE }>
@@ -78,22 +72,16 @@ export type TaskItem = {
   /** Lampiran brief/referensi level task */
   attachments: AttachmentItem[]
   subtasks: SubtaskItem[]
-  /** task ini lahir sebagai revisi dari task lain */
-  isRevision: boolean
-  /** catatan alasan revisi (diisi admin) */
+  /** catatan alasan revisi terakhir (diisi saat Minta Revisi) */
   revisionNote: string | null
-  /** task asal yang direvisi (null bila task biasa) */
-  revisionOf: { id: string; title: string; status: TaskStatus } | null
-  /** daftar task revisi yang lahir dari task ini */
-  revisions: Array<{ id: string; title: string; status: TaskStatus; sprintId: string | null; createdAt: string }>
   /** Total menit dari semua subtask (entry selesai) */
   loggedMinutes: number
-  /** deadline lewat & belum done/cancelled (rule #10, runtime) */
+  /** deadline lewat & belum done (rule #10, runtime) */
   overdue: boolean
   /** deadline task melewati tanggal selesai sprint (peringatan, bukan error) */
   beyondSprint: boolean
   /** ringkasan progres subtask */
-  subtaskProgress: { total: number; done: number; cancelled: number }
+  subtaskProgress: { total: number; done: number }
 }
 
 function sumLoggedMinutes(entries: Array<{ clockInAt: Date; clockOutAt: Date | null }>): number {
@@ -126,7 +114,6 @@ export function mapTask(t: TaskWithRelations, now = new Date()): TaskItem {
   const subtasks = t.subtasks.map(mapSubtask)
   const loggedMinutes = subtasks.reduce((sum, s) => sum + s.loggedMinutes, 0)
   const done = subtasks.filter((s) => s.status === 'done').length
-  const cancelled = subtasks.filter((s) => s.status === 'cancelled').length
   const sprintEnd = t.sprint ? new Date(t.sprint.endDate) : null
   return {
     id: t.id,
@@ -158,23 +145,12 @@ export function mapTask(t: TaskWithRelations, now = new Date()): TaskItem {
     assignees: t.assignees.map((a) => ({ id: a.user.id, name: a.user.name })),
     attachments: t.attachments.map(mapAttachment),
     subtasks,
-    isRevision: t.isRevision,
     revisionNote: t.revisionNote,
-    revisionOf: t.revisionOf
-      ? { id: t.revisionOf.id, title: t.revisionOf.title, status: t.revisionOf.status }
-      : null,
-    revisions: t.revisions.map((r) => ({
-      id: r.id,
-      title: r.title,
-      status: r.status,
-      sprintId: r.sprintId,
-      createdAt: r.createdAt.toISOString(),
-    })),
     loggedMinutes,
-    overdue: t.deadlineAt < now && t.status !== 'done' && t.status !== 'cancelled',
+    overdue: t.deadlineAt < now && t.status !== 'done',
     // Peringatan: deadline task melewati tanggal selesai sprint
     beyondSprint: !!(sprintEnd && t.deadlineAt > sprintEnd),
-    subtaskProgress: { total: subtasks.length, done, cancelled },
+    subtaskProgress: { total: subtasks.length, done },
   }
 }
 
@@ -269,5 +245,5 @@ export type ProjectOverview = {
   backlog: number
   /** task tanpa assignee sama sekali */
   unassigned: number
-  counts: { todo: number; in_progress: number; review: number; done: number; cancelled: number }
+  counts: { todo: number; in_progress: number; review: number; revision: number; done: number }
 }

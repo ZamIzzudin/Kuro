@@ -72,7 +72,7 @@ export async function sprintCounts(sprintIds: string[]): Promise<Map<string, Spr
     const row = map.get(t.sprintId) ?? { ...EMPTY_COUNTS }
     row.total += 1
     if (t.status === 'done') row.done += 1
-    else if (t.status !== 'cancelled') {
+    else {
       if (t.deadlineAt < now) row.overdue += 1
       if (t.sprint && t.deadlineAt > t.sprint.endDate) row.beyondDeadline += 1
     }
@@ -98,23 +98,28 @@ export function findActiveSprint(projectId: string) {
 }
 
 export type CloseSprintResult =
-  | { ok: true; movedToBacklog: number; movedToSprint: number }
+  | { ok: true; movedToBacklog: number; movedToSprint: number; stayedInSprint: number }
   | { ok: false; message: string; status: number }
 
 /**
- * Tutup sprint: task yang belum selesai (todo/in_progress/review) dipindah
- * ke backlog (`sprintId = null`) atau ke sprint lain bila `moveToSprintId` diisi.
+ * Tutup sprint.
  *
- * Riwayat keanggotaan dicatat permanen di TaskSprintHistory (`leftReason`).
- * Task done/cancelled tetap tercatat di sprint sebagai hasil akhir sprint.
+ * Aturan (revisi alur):
+ * - Task `done` tetap di sprint sebagai hasil akhir.
+ * - Task `review` TETAP di sprint lama (dianggap hampir selesai; hanya bisa maju ke done).
+ * - Task belum selesai lainnya (`todo`/`in_progress`/`revision`) yang DIPILIH admin (`taskIds`)
+ *   dipindah ke sprint tujuan BILA `moveToSprintId` diisi; task terpilih tanpa tujuan
+ *   (dan task belum selesai yang tidak dipilih) dikembalikan ke Backlog.
  */
 export async function closeSprint(opts: {
   sprintId: string
   moveToSprintId?: string | null
+  taskIds?: string[]
   actorId: string
   now?: Date
 }): Promise<CloseSprintResult> {
   const now = opts.now ?? new Date()
+  const selected = new Set(opts.taskIds ?? [])
 
   const sprint = await db.sprint.findUnique({
     where: { id: opts.sprintId },
@@ -138,39 +143,49 @@ export async function closeSprint(opts: {
     targetSprintId = target.id
   }
 
-  const others = await db.task.findMany({
-    where: {
-      sprintId: sprint.id,
-      status: { in: ['todo', 'in_progress', 'review'] },
-    },
+  // Task belum selesai yang bisa dipindah: todo / in_progress / revision.
+  // Task `review` sengaja dikecualikan — tetap tinggal di sprint lama.
+  const candidates = await db.task.findMany({
+    where: { sprintId: sprint.id, status: { in: ['todo', 'in_progress', 'revision'] } },
     select: { id: true, status: true },
   })
 
+  const movingToTarget = targetSprintId
+    ? candidates.filter((t) => selected.has(t.id)).map((t) => t.id)
+    : []
+  const toBacklog = candidates.filter((t) => !movingToTarget.includes(t.id)).map((t) => t.id)
+  const reviewStaying = await db.task.count({
+    where: { sprintId: sprint.id, status: { in: ['review', 'done'] } },
+  })
+
   await db.$transaction(async (tx) => {
-    // Riwayat: tandai task yang meninggalkan sprint ini
-    if (others.length) {
+    // Tutup keanggotaan sprint lama untuk task yang keluar (moved/carried_over)
+    if (movingToTarget.length) {
       await tx.taskSprintHistory.updateMany({
-        where: { sprintId: sprint.id, taskId: { in: others.map((t) => t.id) }, leftAt: null },
-        data: { leftAt: now, leftReason: targetSprintId ? 'moved' : 'carried_over' },
+        where: { sprintId: sprint.id, taskId: { in: movingToTarget }, leftAt: null },
+        data: { leftAt: now, leftReason: 'moved' },
+      })
+    }
+    if (toBacklog.length) {
+      await tx.taskSprintHistory.updateMany({
+        where: { sprintId: sprint.id, taskId: { in: toBacklog }, leftAt: null },
+        data: { leftAt: now, leftReason: 'carried_over' },
       })
     }
 
-    // Pindahkan task yang belum selesai
-    if (others.length) {
-      await tx.task.updateMany({
-        where: { id: { in: others.map((t) => t.id) } },
-        data: { sprintId: targetSprintId },
-      })
+    if (movingToTarget.length) {
+      await tx.task.updateMany({ where: { id: { in: movingToTarget } }, data: { sprintId: targetSprintId } })
+    }
+    if (toBacklog.length) {
+      await tx.task.updateMany({ where: { id: { in: toBacklog } }, data: { sprintId: null } })
     }
 
-    // Status task yang sudah selesai → tandai tetap di sprint (riwayat tetap terbuka)
     await tx.sprint.update({ where: { id: sprint.id }, data: { status: 'completed' } })
 
-    // Task yang dipindah ke sprint tujuan → catat keanggotaan baru
-    if (targetSprintId && others.length) {
+    if (targetSprintId && movingToTarget.length) {
       await tx.taskSprintHistory.createMany({
-        data: others.map((t) => ({
-          taskId: t.id,
+        data: movingToTarget.map((taskId) => ({
+          taskId,
           sprintId: targetSprintId as string,
           joinedAt: now,
         })),
@@ -180,8 +195,9 @@ export async function closeSprint(opts: {
 
   return {
     ok: true,
-    movedToBacklog: targetSprintId ? 0 : others.length,
-    movedToSprint: targetSprintId ? others.length : 0,
+    movedToBacklog: toBacklog.length,
+    movedToSprint: movingToTarget.length,
+    stayedInSprint: reviewStaying,
   }
 }
 

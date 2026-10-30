@@ -108,8 +108,8 @@ const EMPTY_STATUS: Record<TaskStatus, number> = {
   todo: 0,
   in_progress: 0,
   review: 0,
+  revision: 0,
   done: 0,
-  cancelled: 0,
 }
 
 /** Ringkasan: total jam hari/minggu/bulan + subtask per status + sprint aktif + daftar overdue */
@@ -135,7 +135,7 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     db.task.findMany({
       where: {
         deadlineAt: { lt: now },
-        status: { notIn: ['done', 'cancelled'] },
+        status: { not: 'done' },
       },
       include: {
         project: { select: { name: true } },

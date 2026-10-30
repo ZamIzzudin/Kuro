@@ -104,6 +104,6 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
   todo: 'To Do',
   in_progress: 'In Progress',
   review: 'Review',
+  revision: 'Revisi',
   done: 'Done',
-  cancelled: 'Dibatalkan',
 }

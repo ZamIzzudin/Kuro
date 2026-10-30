@@ -7,12 +7,12 @@
 import { useState } from "react";
 import { CalendarDays, Layers } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
-import { OverdueBadge, PriorityBadge, RevisionBadge, STATUS_META } from "@/components/task-bits";
+import { OverdueBadge, PriorityBadge, STATUS_META } from "@/components/task-bits";
 import { cn } from "@/lib/utils";
 import { formatDateShortWIB } from "@/lib/time";
 import type { TaskItem } from "@/lib/tasks";
 
-const COLUMNS: TaskStatus[] = ["todo", "in_progress", "review", "done", "cancelled"];
+const COLUMNS: TaskStatus[] = ["todo", "in_progress", "review", "revision", "done"];
 
 export function TaskKanban({
   tasks,
@@ -155,7 +155,6 @@ function TaskKanbanCard({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <PriorityBadge priority={t.priority} />
-        {t.isRevision && <RevisionBadge />}
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-500">
           <CalendarDays className="h-3.5 w-3.5" />
           {formatDateShortWIB(t.deadlineAt)}

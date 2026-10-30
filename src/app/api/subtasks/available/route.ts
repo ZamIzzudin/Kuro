@@ -24,14 +24,13 @@ export async function GET(req: Request) {
   const includeDone = sp.get('includeDone') === '1'
 
   const taskFilter: Prisma.TaskWhereInput = {
-    status: { not: 'cancelled' },
     ...(scope === 'backlog' ? { sprintId: null } : { sprint: { status: 'active' } }),
   }
 
   if (projectId && projectId !== 'all') taskFilter.projectId = projectId
 
   const where: Prisma.SubtaskWhereInput = {
-    status: includeDone ? { not: 'cancelled' } : { notIn: ['done', 'cancelled'] },
+    status: includeDone ? {} : { notIn: ['done'] },
     task: taskFilter,
   }
 
@@ -62,9 +61,10 @@ export async function GET(req: Request) {
       id: s.task.id,
       title: s.task.title,
       priority: s.task.priority,
+      status: s.task.status,
       deadlineAt: s.task.deadlineAt.toISOString(),
-      overdue: s.task.deadlineAt < now && s.task.status !== 'done' && s.task.status !== 'cancelled',
-      isRevision: s.task.isRevision,
+      overdue: s.task.deadlineAt < now && s.task.status !== 'done',
+      revisionNote: s.task.revisionNote,
       project: s.task.project,
       workType: s.task.workType,
       requester: s.task.requester,

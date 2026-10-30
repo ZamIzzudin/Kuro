@@ -25,8 +25,8 @@ enum TaskStatus {
   todo
   in_progress
   review
+  revision
   done
-  cancelled
 }
 
 enum Priority {
@@ -208,14 +208,7 @@ model Task {
   deadlineAt     DateTime
   estimatedHours Decimal?   @db.Decimal(5, 1) // kelipatan 0,5
   status         TaskStatus @default(todo)
-  // Penanda task ini lahir sebagai REVISI dari task lain (bukan task biasa).
-  // Statusnya tetap `todo` agar bisa diambil di sprint berikutnya.
-  isRevision     Boolean    @default(false)
-  // Task asal yang diminta revisi (self-relation). NULL = task biasa.
-  revisionOfId   String?
-  revisionOf     Task?      @relation("TaskRevision", fields: [revisionOfId], references: [id])
-  revisions      Task[]     @relation("TaskRevision")
-  // Catatan alasan revisi (diisi admin saat membuat revisi).
+  // Catatan alasan revisi terakhir (diisi saat Minta Revisi). NULL = belum pernah.
   revisionNote   String?
   createdById    String
   createdBy      User       @relation("TaskCreator", fields: [createdById], references: [id])
@@ -231,7 +224,6 @@ model Task {
   @@index([projectId])
   @@index([sprintId])
   @@index([requesterId])
-  @@index([revisionOfId])
 }
 
 // Assign freelancer ke sebuah Task (multi-assignee) — pool yang boleh mengerjakan subtask

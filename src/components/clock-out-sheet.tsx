@@ -41,7 +41,7 @@ export function ClockOutSheet({
   const [saving, setSaving] = useState(false)
 
   // Subtask Done/Dibatalkan terkunci — hanya admin yang boleh mengubah statusnya.
-  const locked = entry.subtask.status === 'done' || entry.subtask.status === 'cancelled'
+  const locked = entry.subtask.status === 'done'
   const remaining = 10 - note.trim().length
 
   async function submit() {

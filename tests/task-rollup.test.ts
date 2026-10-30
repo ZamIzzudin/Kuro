@@ -11,15 +11,20 @@ test('rollupTaskStatus: semua todo → todo', () => {
   assert.equal(rollupTaskStatus(['todo', 'todo']), 'todo')
 })
 
-test('rollupTaskStatus: semua done/cancelled → done', () => {
+test('rollupTaskStatus: semua done → done', () => {
   assert.equal(rollupTaskStatus(['done', 'done']), 'done')
-  assert.equal(rollupTaskStatus(['done', 'cancelled']), 'done')
-  assert.equal(rollupTaskStatus(['cancelled', 'cancelled']), 'done')
+})
+
+test('rollupTaskStatus: ada subtask revision → revision', () => {
+  assert.equal(rollupTaskStatus(['revision', 'done']), 'revision')
+  assert.equal(rollupTaskStatus(['revision', 'review']), 'revision')
+  assert.equal(rollupTaskStatus(['revision', 'in_progress']), 'revision')
+  assert.equal(rollupTaskStatus(['revision', 'todo']), 'revision')
 })
 
 test('rollupTaskStatus: semua sisa review → review', () => {
   assert.equal(rollupTaskStatus(['review', 'review']), 'review')
-  // done/cancelled diabaikan, sisanya review → review
+  // done diabaikan, sisanya review → review
   assert.equal(rollupTaskStatus(['done', 'review']), 'review')
 })
 

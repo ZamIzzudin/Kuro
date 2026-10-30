@@ -22,8 +22,8 @@ test('clockOutSchema: note wajib >= 10 karakter (rule #9)', () => {
   assert.equal(clockOutSchema.safeParse({ ...base, note: 'pendek' }).success, false)
   // 9 karakter tetap gagal
   assert.equal(clockOutSchema.safeParse({ ...base, note: '123456789' }).success, false)
-  // status tidak valid (cancelled bukan opsi clock out)
-  assert.equal(clockOutSchema.safeParse({ ...base, subtaskStatus: 'cancelled' }).success, false)
+  // status tidak valid (revision bukan opsi clock out)
+  assert.equal(clockOutSchema.safeParse({ ...base, subtaskStatus: 'revision' }).success, false)
 })
 
 test('taskCreateSchema: estimasi harus kelipatan 0,5 jam', () => {

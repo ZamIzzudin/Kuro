@@ -31,7 +31,7 @@ export type ProjectItem = {
   /** jumlah task di project ini */
   taskCount: number
   /** jumlah task per status (untuk donut ringkasan) */
-  counts: { todo: number; in_progress: number; review: number; done: number; cancelled: number }
+  counts: { todo: number; in_progress: number; review: number; revision: number; done: number }
   /** task belum selesai yang sudah lewat tenggat */
   overdue: number
   /** task belum selesai yang tenggatnya dalam 7 hari ke depan (belum lewat) */
@@ -56,7 +56,7 @@ export function mapProject(p: ProjectWithRelations, now = new Date()): ProjectIt
   let overdue = 0
   let dueSoon = 0
   for (const t of p.tasks) {
-    if (t.status === 'done' || t.status === 'cancelled') continue
+    if (t.status === 'done') continue
     if (t.deadlineAt < now) overdue += 1
     else if (t.deadlineAt <= weekAhead) dueSoon += 1
   }
@@ -73,8 +73,8 @@ export function mapProject(p: ProjectWithRelations, now = new Date()): ProjectIt
       todo: p.tasks.filter((t) => t.status === 'todo').length,
       in_progress: p.tasks.filter((t) => t.status === 'in_progress').length,
       review: p.tasks.filter((t) => t.status === 'review').length,
+      revision: p.tasks.filter((t) => t.status === 'revision').length,
       done: p.tasks.filter((t) => t.status === 'done').length,
-      cancelled: p.tasks.filter((t) => t.status === 'cancelled').length,
     },
     overdue,
     dueSoon,

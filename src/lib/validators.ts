@@ -147,7 +147,7 @@ export const projectDeleteSchema = z.object({
 
 // ===== Fase 2: Sprint / Task / Subtask =====
 
-export const TASK_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'done'] as const
+export const TASK_STATUS_OPTIONS = ['todo', 'in_progress', 'review', 'revision', 'done'] as const
 
 export const SPRINT_STATUS_OPTIONS = ['planned', 'active', 'completed'] as const
 
@@ -219,11 +219,23 @@ export const sprintUpdateSchema = z
     { message: 'Tidak ada perubahan' }
   )
 
-/** Task belum selesai saat sprint ditutup — dipindah ke backlog (default) atau sprint lain. */
+/** Task belum selesai saat sprint ditutup — dipilih untuk dipindah ke sprint lain; sisanya ke backlog. */
 export const sprintCompleteSchema = z.object({
-  /** id sprint tujuan untuk task yang belum selesai; kosong = lempar ke backlog */
+  /** id sprint tujuan untuk task yang DIPILIH; kosong = semua ke backlog */
   moveToSprintId: z.string().min(1).optional().nullable(),
+  /** id task yang belum selesai dan dipilih pindah ke sprint tujuan */
+  taskIds: z.array(z.string().min(1)).max(500).optional(),
 })
+
+/** Kelola keanggotaan task pada sebuah sprint (tambah dari Backlog / keluarkan). */
+export const sprintTasksSchema = z
+  .object({
+    addTaskIds: z.array(z.string().min(1)).max(500).optional(),
+    removeTaskIds: z.array(z.string().min(1)).max(500).optional(),
+  })
+  .refine((v) => (v.addTaskIds?.length ?? 0) > 0 || (v.removeTaskIds?.length ?? 0) > 0, {
+    message: 'Tidak ada task yang dipilih',
+  })
 
 /** Satu baris subtask dalam payload task (buat/ubah). `id` ada = subtask lama. */
 export const subtaskInputSchema = z.object({
@@ -244,8 +256,8 @@ export const subtaskUpdateSchema = z
     assigneeId: z.string().min(1).optional().nullable(),
     estimatedHours: estimatedHoursField.optional().nullable(),
     position: z.number().int().min(0).max(9999).optional(),
-    // Admin boleh mengubah status subtask termasuk membatalkan (cancelled).
-    status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
+    // Admin boleh mengubah status subtask termasuk mengembalikannya ke revision.
+    status: z.enum(['todo', 'in_progress', 'review', 'revision', 'done']).optional(),
     addAttachments: z.array(attachmentInputSchema).max(50).optional(),
     removeAttachmentIds: z.array(z.string().min(1)).max(100).optional(),
   })
@@ -255,8 +267,6 @@ export const taskCreateSchema = z.object({
   title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120, 'Judul maksimal 120 karakter'),
   description: z.string().trim().max(DESCRIPTION_MAX, 'Deskripsi terlalu panjang').optional().nullable(),
   projectId: z.string().min(1, 'Project wajib dipilih'),
-  // NULL = Backlog (di luar sprint)
-  sprintId: z.string().min(1).optional().nullable(),
   workTypeId: z.string().min(1, 'Jenis pekerjaan wajib dipilih'),
   requesterId: z.string().min(1, 'Requester wajib dipilih'),
   // Multi-assignee: daftar freelancer yang boleh mengerjakan subtask task ini
@@ -274,7 +284,6 @@ export const taskUpdateSchema = z.object({
   title: z.string().trim().min(3, 'Judul minimal 3 karakter').max(120).optional(),
   description: z.string().trim().max(DESCRIPTION_MAX).optional().nullable(),
   projectId: z.string().min(1).optional(),
-  sprintId: z.string().min(1).optional().nullable(),
   workTypeId: z.string().min(1).optional(),
   requesterId: z.string().min(1).optional(),
   assigneeIds: z.array(z.string().min(1)).max(50).optional(),
@@ -282,7 +291,7 @@ export const taskUpdateSchema = z.object({
   estimatedHours: estimatedHoursField.optional().nullable(),
   requestDateLocal: dateOnlyField.optional(),
   deadlineLocal: dateTimeField.optional(),
-  status: z.enum(['todo', 'in_progress', 'review', 'done', 'cancelled']).optional(),
+  status: z.enum(['todo', 'in_progress', 'review', 'revision', 'done']).optional(),
   // Sinkronisasi daftar subtask: item tanpa `id` dibuat, item dengan `id` diperbarui.
   // Subtask lama yang tidak ada di daftar akan dihapus (bila belum punya time entry).
   subtasks: z.array(subtaskInputSchema).max(100).optional(),
@@ -296,12 +305,12 @@ export const taskStatusSchema = z.object({
   status: z.enum(TASK_STATUS_OPTIONS, { errorMap: () => ({ message: 'Status tidak valid' }) }),
 })
 
-/** Buat task REVISI dari task yang sudah done/review — detail disalin, status jadi To Do. */
+/** Minta Revisi — kembalikan subtask terpilih ke status `revision` + catatan alasan. */
 export const taskRevisionSchema = z.object({
-  // Catatan alasan revisi (opsional, ditampilkan di detail task revisi).
+  // Catatan alasan revisi (opsional, ditampilkan di detail task).
   note: z.string().trim().max(1000, 'Catatan revisi maksimal 1000 karakter').optional().nullable(),
-  // Sprint tujuan task revisi; kosong = Backlog (agar bisa diambil di sprint berikutnya).
-  sprintId: z.string().min(1).optional().nullable(),
+  // Subtask yang dikembalikan menjadi revision (minimal satu).
+  subtaskIds: z.array(z.string().min(1)).min(1, 'Pilih minimal satu subtask').max(100),
 })
 
 // ===== Subtask (unit kerja) =====

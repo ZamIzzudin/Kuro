@@ -48,7 +48,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         status: t.status,
         priority: t.priority,
         deadlineAt: t.deadlineAt.toISOString(),
-        overdue: t.deadlineAt < new Date() && t.status !== 'done' && t.status !== 'cancelled',
+        overdue: t.deadlineAt < new Date() && t.status !== 'done',
         project: t.project,
         workType: t.workType,
         requester: t.requester,

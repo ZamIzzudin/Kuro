@@ -50,13 +50,17 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     )
   }
 
-  if (subtask.status === 'done' || subtask.status === 'cancelled') {
+  if (subtask.status === 'done') {
     return NextResponse.json(
-      {
-        error: `Subtask sudah ${subtask.status === 'done' ? 'selesai' : 'dibatalkan'} — status terkunci (hanya admin).`,
-      },
+      { error: 'Subtask sudah selesai — status terkunci (hanya admin).' },
       { status: 400 }
     )
+  }
+
+  // Freelancer tidak boleh menetapkan `revision` langsung — status itu hanya
+  // muncul lewat aksi Minta Revisi.
+  if (status === 'revision') {
+    return NextResponse.json({ error: 'Status tidak valid untuk freelancer.' }, { status: 400 })
   }
 
   const claimed = claimable

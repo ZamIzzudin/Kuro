@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { ArrowLeft, Ban, Eye, LayoutGrid, Layers, List, Pencil, Plus, RotateCcw, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, Eye, LayoutGrid, Layers, List, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import type { Priority, TaskStatus } from "@prisma/client";
 import {
   Button,
@@ -13,7 +13,6 @@ import {
   Input,
   Select,
   Spinner,
-  Textarea,
   Tooltip,
 } from "@/components/ui";
 import { Sheet } from "@/components/sheet";
@@ -29,8 +28,6 @@ import { TaskKanban } from "./task-kanban";
 import {
   OverdueBadge,
   PriorityBadge,
-  RevisionBadge,
-  RevisionCountBadge,
   STATUS_META,
   StatusPill,
 } from "@/components/task-bits";
@@ -38,7 +35,6 @@ import { apiSend, fetcher } from "@/lib/client";
 import type { Role } from "@/lib/roles";
 import { dateToWibLocal, formatDateWIB, todayWibDate } from "@/lib/time";
 import type { TaskItem } from "@/lib/tasks";
-import type { SprintItem } from "@/lib/sprints";
 import type { ProjectItem } from "@/lib/projects";
 
 type MasterOption = { id: string; name: string; isActive: boolean };
@@ -79,10 +75,6 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
     "/api/requesters",
     fetcher,
   );
-  const sprintsReq = useSWR<{ sprints: SprintItem[] }>(
-    `/api/sprints?projectId=${projectId}`,
-    fetcher,
-  );
   const projectReq = useSWR<{ project: ProjectItem }>(
     `/api/projects/${projectId}`,
     fetcher,
@@ -97,14 +89,15 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
   const [formTarget, setFormTarget] = useState<TaskItem | "create" | null>(
     null,
   );
-  const [cancelFor, setCancelFor] = useState<TaskItem | null>(null);
-  const [revisionFor, setRevisionFor] = useState<TaskItem | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [rowError, setRowError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const tasks = useMemo(() => tasksReq.data?.tasks ?? [], [tasksReq.data]);
-  const sprints = useMemo(() => sprintsReq.data?.sprints ?? [], [sprintsReq.data]);
+  const sprints = useMemo(
+    () => Array.from(new Map(tasks.filter((t) => t.sprint).map((t) => [t.sprint!.id, t.sprint!])).values()),
+    [tasks],
+  );
   const freelancers = (usersReq.data?.users ?? []).filter(
     (u) => u.role === "freelancer",
   );
@@ -138,8 +131,7 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
     usersReq.error ||
     workTypesReq.error ||
     requestersReq.error ||
-    projectReq.error ||
-    sprintsReq.error;
+    projectReq.error;
   const canCreate =
     !workTypesReq.isLoading && workTypes.length > 0 && requesters.length > 0;
 
@@ -265,8 +257,8 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                 "todo",
                 "in_progress",
                 "review",
+                "revision",
                 "done",
-                "cancelled",
               ] as TaskStatus[]
             ).map((s) => (
               <option key={s} value={s}>
@@ -400,12 +392,6 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                       <PriorityBadge priority={t.priority} />
                       <span>{t.workType.name}</span>
                     </div>
-                    {(t.isRevision || t.revisions.length > 0) && (
-                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        {t.isRevision && <RevisionBadge />}
-                        <RevisionCountBadge count={t.revisions.length} />
-                      </div>
-                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     {t.sprint ? (
@@ -461,21 +447,6 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
                         icon={<Pencil className="h-4 w-4" />}
                         onClick={() => setFormTarget(t)}
                       />
-                      {(t.status === "done" || t.status === "review") && (
-                        <IconButton
-                          label="Buat Revisi"
-                          icon={<RotateCcw className="h-4 w-4" />}
-                          onClick={() => setRevisionFor(t)}
-                        />
-                      )}
-                      {t.status !== "cancelled" && t.status !== "done" && (
-                        <IconButton
-                          label="Batalkan"
-                          variant="danger"
-                          icon={<Ban className="h-4 w-4" />}
-                          onClick={() => setCancelFor(t)}
-                        />
-                      )}
                     </div>
                   </td>
                 </tr>
@@ -499,32 +470,15 @@ export function AdminProjectTasksClient({ projectId }: { projectId: string }) {
             requesters,
             allRequesters,
           )}
-          sprints={sprints}
           onClose={() => setFormTarget(null)}
           onDone={() => tasksReq.mutate()}
         />
       )}
 
-      <CancelSheet
-        task={cancelFor}
-        onClose={() => setCancelFor(null)}
-        onDone={() => tasksReq.mutate()}
-        onError={setRowError}
-      />
-
-      <RevisionSheet
-        task={revisionFor}
-        sprints={sprints}
-        onClose={() => setRevisionFor(null)}
-        onDone={() => tasksReq.mutate()}
-        onError={setRowError}
-      />
-
       {detailId && (
         <TaskDetailSheet
           taskId={detailId}
           fallback={tasks.find((t) => t.id === detailId) ?? null}
-          onOpenTask={setDetailId}
           onClose={() => setDetailId(null)}
         />
       )}
@@ -552,7 +506,6 @@ function TaskFormSheet({
   freelancers,
   workTypes,
   requesters,
-  sprints,
   onClose,
   onDone,
 }: {
@@ -562,7 +515,6 @@ function TaskFormSheet({
   freelancers: UserRow[];
   workTypes: MasterOption[];
   requesters: MasterOption[];
-  sprints: SprintItem[];
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -574,7 +526,6 @@ function TaskFormSheet({
   const [requesterId, setRequesterId] = useState(
     initial?.requesterId ?? requesters[0]?.id ?? "",
   );
-  const [sprintId, setSprintId] = useState(initial?.sprintId ?? "");
   const [assigneeIds, setAssigneeIds] = useState<string[]>(
     initial?.assignees.map((a) => a.id) ?? [],
   );
@@ -590,7 +541,6 @@ function TaskFormSheet({
   const [deadlineLocal, setDeadlineLocal] = useState(
     initial ? dateToWibLocal(initial.deadlineAt) : "",
   );
-  const [status, setStatus] = useState<TaskStatus>(initial?.status ?? "todo");
   const [newFiles, setNewFiles] = useState<PendingAttachment[]>([]);
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [subtasks, setSubtasks] = useState<SubtaskDraft[]>(
@@ -651,7 +601,6 @@ function TaskFormSheet({
       title: title.trim(),
       description: description.trim() || null,
       projectId,
-      sprintId: sprintId || null,
       workTypeId,
       requesterId,
       assigneeIds,
@@ -661,7 +610,6 @@ function TaskFormSheet({
       requestDateLocal,
       deadlineLocal,
       subtasks: cleanSubtasks,
-      ...(isEdit ? { status } : {}),
       ...(isEdit
         ? { addAttachments: attachments, removeAttachmentIds: removedIds }
         : { attachments }),
@@ -751,21 +699,6 @@ function TaskFormSheet({
             </Select>
           </div>
           <div>
-            <FieldLabel htmlFor="t-sprint">Sprint</FieldLabel>
-            <Select
-              id="t-sprint"
-              value={sprintId}
-              onChange={(e) => setSprintId(e.target.value)}
-            >
-              <option value="">Backlog (di luar sprint)</option>
-              {sprints.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} · {s.status}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
             <FieldLabel htmlFor="t-priority">Prioritas</FieldLabel>
             <Select
               id="t-priority"
@@ -812,30 +745,6 @@ function TaskFormSheet({
               onChange={(e) => setDeadlineLocal(e.target.value)}
             />
           </div>
-          {isEdit && (
-            <div>
-              <FieldLabel htmlFor="t-status">Status</FieldLabel>
-              <Select
-                id="t-status"
-                value={status}
-                onChange={(e) => setStatus(e.target.value as TaskStatus)}
-              >
-                {(
-                  [
-                    "todo",
-                    "in_progress",
-                    "review",
-                    "done",
-                    "cancelled",
-                  ] as TaskStatus[]
-                ).map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_META[s].label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
         </div>
 
         <div>
@@ -990,164 +899,6 @@ function TaskFormSheet({
           </Button>
         </div>
       </form>
-    </Sheet>
-  );
-}
-
-function CancelSheet({
-  task,
-  onClose,
-  onDone,
-  onError,
-}: {
-  task: TaskItem | null;
-  onClose: () => void;
-  onDone: () => void;
-  onError: (msg: string | null) => void;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirm() {
-    if (!task) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await apiSend(`/api/tasks/${task.id}`, "PATCH", { status: "cancelled" });
-      onDone();
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Gagal membatalkan task";
-      setError(msg);
-      onError(msg);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Sheet open={!!task} onClose={onClose} title="Batalkan Task">
-      <div className="space-y-4">
-        <p className="text-sm text-ink-700">
-          Yakin membatalkan <span className="font-bold">“{task?.title}”</span>?
-          Semua subtask akan menjadi <span className="font-bold">Dibatalkan</span>{" "}
-          dan tidak bisa dipilih untuk clock in.
-        </p>
-        {error && <ErrorNote>{error}</ErrorNote>}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            Kembali
-          </Button>
-          <Button variant="danger" loading={saving} onClick={confirm}>
-            Ya, Batalkan
-          </Button>
-        </div>
-      </div>
-    </Sheet>
-  );
-}
-
-/**
- * Buat task REVISI dari task yang sudah done/review.
- * Task lama tetap Done; task baru berstatus To Do agar bisa diambil pada sprint
- * berikutnya. Detail disalin apa adanya — admin lalu mengubah yang perlu direvisi.
- */
-function RevisionSheet({
-  task,
-  sprints,
-  onClose,
-  onDone,
-  onError,
-}: {
-  task: TaskItem | null;
-  sprints: SprintItem[];
-  onClose: () => void;
-  onDone: () => void;
-  onError: (msg: string | null) => void;
-}) {
-  const [note, setNote] = useState("");
-  const [sprintId, setSprintId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const fromReview = task?.status === "review";
-
-  async function confirm() {
-    if (!task) return;
-    setSaving(true);
-    setError(null);
-    try {
-      await apiSend(`/api/tasks/${task.id}/revisions`, "POST", {
-        note: note.trim() || null,
-        sprintId: sprintId || null,
-      });
-      onDone();
-      onClose();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Gagal membuat revisi";
-      setError(msg);
-      onError(msg);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Sheet open={!!task} onClose={onClose} title="Buat Task Revisi">
-      <div className="space-y-4">
-        <div className="rounded-lg border border-brand-1/20 bg-brand-soft/40 px-4 py-3">
-          <p className="text-[13px] font-bold text-ink-900">{task?.title}</p>
-          <p className="mt-1 text-[12.5px] text-ink-500">
-            Dibuat sebagai <span className="font-bold">task baru</span> berstatus{" "}
-            <span className="font-bold">To Do</span> dengan detail yang disalin dari task ini.
-            {fromReview && " Task ini akan dinaikkan menjadi Done."}
-          </p>
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="rev-note">Catatan revisi (opsional)</FieldLabel>
-          <Textarea
-            id="rev-note"
-            rows={4}
-            maxLength={1000}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="Apa yang perlu direvisi? (mis. warna tombol kurang kontras, copy berubah)"
-          />
-        </div>
-
-        <div>
-          <FieldLabel htmlFor="rev-sprint">Sprint task revisi</FieldLabel>
-          <Select
-            id="rev-sprint"
-            value={sprintId}
-            onChange={(e) => setSprintId(e.target.value)}
-          >
-            <option value="">Backlog (bisa diambil pada sprint berikutnya)</option>
-            {sprints.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} · {s.status}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        {task && task.subtasks.length > 0 && (
-          <p className="text-[12.5px] text-ink-500">
-            {task.subtasks.length} subtask akan disalin dengan status To Do.
-          </p>
-        )}
-
-        {error && <ErrorNote>{error}</ErrorNote>}
-        <div className="flex justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            Batal
-          </Button>
-          <Button variant="primary" loading={saving} onClick={confirm}>
-            Buat Revisi
-          </Button>
-        </div>
-      </div>
     </Sheet>
   );
 }

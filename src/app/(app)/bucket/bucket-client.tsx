@@ -11,7 +11,7 @@ import useSWR from "swr";
 import { ArrowRight, CalendarDays, FolderKanban } from "lucide-react";
 import type { TaskStatus } from "@prisma/client";
 import { ErrorNote, Select, Spinner } from "@/components/ui";
-import { OverdueBadge, PriorityBadge, RevisionBadge, STATUS_META } from "@/components/task-bits";
+import { OverdueBadge, PriorityBadge, STATUS_META } from "@/components/task-bits";
 import { SubtaskDetailSheet } from "@/components/subtask-detail";
 import { useProjectScope } from "@/components/project-scope";
 import { apiSend, fetcher } from "@/lib/client";
@@ -20,14 +20,22 @@ import { formatDateShortWIB } from "@/lib/time";
 import type { TaskItem, SubtaskItem } from "@/lib/tasks";
 import type { ProjectItem } from "@/lib/projects";
 
-const COLUMNS: TaskStatus[] = ["todo", "in_progress", "review", "done"];
+const COLUMNS: TaskStatus[] = ["todo", "in_progress", "review", "revision", "done"];
 
 type Scope = "active" | "backlog";
 
 type AvailableSubtask = SubtaskItem & {
   task: Pick<
     TaskItem,
-    "id" | "title" | "priority" | "deadlineAt" | "overdue" | "isRevision" | "workType" | "requester" | "project"
+    | "id"
+    | "title"
+    | "priority"
+    | "status"
+    | "deadlineAt"
+    | "overdue"
+    | "workType"
+    | "requester"
+    | "project"
   >;
 };
 
@@ -57,13 +65,10 @@ export function BucketClient() {
   // Hanya subtask milik saya atau belum berassignee (bisa diambil) yang bisa digeser,
   // dan hanya pada sprint aktif.
   const canDrag = (s: AvailableSubtask) =>
-    scope === "active" &&
-    s.status !== "done" &&
-    s.status !== "cancelled" &&
-    (s.assigneeId === null || s.assigneeId === myId);
+    scope === "active" && s.status !== "done" && (s.assigneeId === null || s.assigneeId === myId);
 
   const filtered = subtasks.filter(
-    (s) => s.status !== "cancelled" && (fPriority === "all" || s.task.priority === fPriority),
+    (s) => fPriority === "all" || s.task.priority === fPriority,
   );
 
   async function changeStatus(s: AvailableSubtask, status: string) {
@@ -310,7 +315,6 @@ function SubtaskCard({
 
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <PriorityBadge priority={task.priority} />
-        {task.isRevision && <RevisionBadge />}
         <span className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-500">
           <CalendarDays className="h-3.5 w-3.5" />
           {formatDateShortWIB(task.deadlineAt)}

@@ -69,8 +69,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       entityType: 'sprint',
       entityId: params.id,
       oldValue: { status: before.status },
-      newValue: { status: 'completed', movedToBacklog: result.movedToBacklog, movedToSprint: result.movedToSprint },
-      description: `${admin.name} menutup sprint "${before.name}" — ${result.movedToBacklog + result.movedToSprint} task kembali ke backlog`,
+      newValue: { status: 'completed', movedToBacklog: result.movedToBacklog, movedToSprint: result.movedToSprint, stayedInSprint: result.stayedInSprint },
+      description: `${admin.name} menutup sprint "${before.name}"`,
     })
     const after = await db.sprint.findUniqueOrThrow({ where: { id: params.id }, include: SPRINT_INCLUDE })
     return NextResponse.json({ sprint: mapSprint(after) })
@@ -131,6 +131,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const result = await closeSprint({
     sprintId: params.id,
     moveToSprintId: parsed.data.moveToSprintId || null,
+    taskIds: parsed.data.taskIds,
     actorId: admin.id,
   })
   if (!result.ok) return NextResponse.json({ error: result.message }, { status: result.status })
@@ -144,7 +145,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       movedToBacklog: result.movedToBacklog,
       movedToSprint: result.movedToSprint,
     },
-    description: `${admin.name} menutup sprint "${before.name}" — ${result.movedToBacklog + result.movedToSprint} task dipindahkan`,
+    description: `${admin.name} menutup sprint "${before.name}" — ${result.movedToSprint} task dipindah, ${result.movedToBacklog} ke Backlog, ${result.stayedInSprint} task Review/Done tetap di sprint`,
   })
 
   const after = await db.sprint.findUniqueOrThrow({ where: { id: params.id }, include: SPRINT_INCLUDE })
